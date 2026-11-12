@@ -63,7 +63,23 @@
       <div class="table-card" data-reveal style="--d:1">
         <table class="day-table" id="day-table"></table>
       </div>
-      <p class="foot-note" data-reveal style="--d:2">Numbers are the benefit of running a service in that slot. All values are synthetic. The clinic's vaccine fridge is powered before planning starts and never competes.</p>
+      <div class="formulation" data-reveal style="--d:2">
+        <div class="fm-goal">
+          <span class="fm-k">Goal</span>
+          <p class="fm-big">Maximise total benefit, minus 0.25 for each battery block used.</p>
+          <p class="fm-small">11 yes or no decisions: 7 say which service runs in which slot, 4 say where the battery is used.</p>
+        </div>
+        <div class="fm-rules">
+          <span class="fm-k">Rules</span>
+          <ol>
+            <li>Each service runs at most once.</li>
+            <li>A slot never uses more than its sun plus the battery.</li>
+            <li>The battery is used in one slot at most.</li>
+            <li>A service only runs in the slots it is allowed.</li>
+          </ol>
+        </div>
+      </div>
+      <p class="foot-note" data-reveal style="--d:3">Numbers are the benefit of running a service in that slot. All values are synthetic. The clinic's vaccine fridge is powered before planning starts and never competes.</p>
     </div>
   </section>
 
@@ -107,7 +123,7 @@
       <ol class="steps" data-reveal style="--d:2">
         <li><b>Describe the day</b><span>11 yes or no decisions. Seven for services, four for the battery.</span></li>
         <li><b>Fine every broken rule</b><span>12 points each, so the cheapest day is the best one.</span></li>
-        <li><b>Run QAOA in Qiskit</b><span>Tune the angles, then measure the circuit 4,096 times.</span></li>
+        <li><b>Run QAOA in Qiskit</b><span>Built for yes or no choices with a cost, and shallow enough for today's machines. Tune, then measure 4,096 times.</span></li>
         <li><b>Check every answer</b><span>Against the original rules. The exact answer is never inserted.</span></li>
       </ol>
     </div>

@@ -26,6 +26,30 @@ The clinic's vaccine fridge is protected first and is never part of the trade.
 5. Compares everything with the exact answer, with first come first served,
    and with random guessing.
 
+## Results at a glance
+
+From our recorded run (`results/results.json`, Qiskit 2.6.2, Aer statevector simulator, seeds fixed).
+Both encodings got the same optimiser budget: 3 starting points, 150 steps per layer.
+
+| Measure | Standard, 20 qubits | Suhai, 11 qubits |
+| --- | --- | --- |
+| Helper qubits | 9 | 0 |
+| Two qubit gates per layer | 106 | 46 |
+| Circuit depth per layer | 60 | 55 |
+| Samples that keep every rule, 1 layer | 6.2% | 24.5% |
+| Samples that keep every rule, 2 layers | 10.0% | 52.6% |
+| Samples that are the exact best, 2 layers | 0.24% | 3.12% |
+| Simulator time, 1 layer | 136 s | 3.7 s |
+| Best valid sample found | 25 | 25 |
+
+* Exact answer by checking all 2,048 schedules: benefit 25, only 52 schedules are valid.
+* Suhai at 1, 2 and 3 layers (larger budget): 24.5%, 52.6% and 69.8% valid. The best valid sample is the exact best at every depth.
+* Random guessing: 2.5% valid. First come first served over all 24 arrival orders: 9 to 25, average 16.8.
+* With a 10 kWh battery the exact best rises to 28 and households are served. QAOA samples that schedule too.
+
+None of this is a speedup. Enumeration is faster on an instance this small. The gain is fewer qubits
+and gates for the same answer, which is what small, noisy quantum computers need.
+
 ## Setup
 
 Python 3.10 or newer.

@@ -1,6 +1,6 @@
 // Small, hand written charts. Thin marks, quiet axes, a hover layer on every one.
 
-import { tip } from "./motion.js";
+import { tip } from "./motion.js?v=20261112c";
 
 const NS = "http://www.w3.org/2000/svg";
 const el = (name, attrs = {}, parent) => {

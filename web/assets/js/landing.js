@@ -1,10 +1,10 @@
-import { api, fmt } from "./api.js";
-import { initMotion, segmented, tip, toast, countTo } from "./motion.js";
-import { groupedBars, dotStrip, scheduleGrid, bitsOf } from "./charts.js";
-import { renderSlots, escapeHtml } from "./ui.js";
-import { hillSVG } from "./hill.js";
-import { playIntro } from "./intro.js";
-import { createRegister } from "./register.js";
+import { api, fmt } from "./api.js?v=20261112c";
+import { initMotion, segmented, tip, toast, countTo } from "./motion.js?v=20261112c";
+import { groupedBars, dotStrip, scheduleGrid, bitsOf } from "./charts.js?v=20261112c";
+import { renderSlots, escapeHtml } from "./ui.js?v=20261112c";
+import { hillSVG } from "./hill.js?v=20261112c";
+import { playIntro } from "./intro.js?v=20261112c";
+import { createRegister } from "./register.js?v=20261112c";
 
 const $ = (s, r = document) => r.querySelector(s);
 const SWATCH = { m: "m", i: "i", w: "w", h: "h" };

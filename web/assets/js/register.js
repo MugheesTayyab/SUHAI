@@ -3,7 +3,7 @@
 // all 2,048 days at once. Measurement collapses each one to on or off, left to right.
 // Only transform and opacity move, so it stays smooth on any laptop.
 
-import { SERVICE } from "./ui.js";
+import { SERVICE } from "./ui.js?v=20261112c";
 
 const SHORT = { m: "Milk", i: "Irrigation", w: "Water", h: "Homes" };
 

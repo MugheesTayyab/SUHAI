@@ -1,13 +1,13 @@
 // Suhai control room. The qubit register first, then the plan it measured, quantum against
 // classical, every answer checked, and a day you build yourself.
 
-import { api, fmt } from "./api.js";
-import { initMotion, segmented, tip, toast, countTo } from "./motion.js";
-import { playIntro } from "./intro.js";
-import { createScene, slotState, SLOT_PHASE } from "./scene.js";
-import { liveTrace, scheduleGrid, bitsOf } from "./charts.js";
-import { SERVICE, renderSlots, slotSentence, escapeHtml } from "./ui.js";
-import { createRegister } from "./register.js";
+import { api, fmt } from "./api.js?v=20261112c";
+import { initMotion, segmented, tip, toast, countTo } from "./motion.js?v=20261112c";
+import { playIntro } from "./intro.js?v=20261112c";
+import { createScene, slotState, SLOT_PHASE } from "./scene.js?v=20261112c";
+import { liveTrace, scheduleGrid, bitsOf } from "./charts.js?v=20261112c";
+import { SERVICE, renderSlots, slotSentence, escapeHtml } from "./ui.js?v=20261112c";
+import { createRegister } from "./register.js?v=20261112c";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];

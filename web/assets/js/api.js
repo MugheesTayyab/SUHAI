@@ -8,7 +8,7 @@
 //
 // /api/health decides. On Vercel it is rewritten to /data/health.json, which says "recorded".
 
-import { evaluateFromTable, replay } from "./static.js";
+import { evaluateFromTable, replay } from "./static.js?v=20261112c";
 
 const cache = new Map();
 

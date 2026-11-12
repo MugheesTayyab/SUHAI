@@ -235,7 +235,17 @@ async def value_error(_: Request, exc: ValueError):
 
 @app.get("/app", include_in_schema=False)
 def control_room():
-    return FileResponse(WEB / "app.html")
+    return FileResponse(WEB / "app.html", headers={"Cache-Control": "no-cache"})
 
 
-app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
+class FreshStaticFiles(StaticFiles):
+    """Pages, styles and scripts are always revalidated, so a browser never mixes a new page
+    with an old stylesheet. Unchanged files still come back as a quick 304."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/", FreshStaticFiles(directory=WEB, html=True), name="web")

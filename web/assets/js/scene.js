@@ -1,6 +1,6 @@
 // The village, drawn by hand in SVG. It lives through one day and lights up only what the schedule powers.
 
-import { reduced } from "./motion.js";
+import { reduced } from "./motion.js?v=20261112c";
 
 const SKY = [
   // phase, top, middle, horizon

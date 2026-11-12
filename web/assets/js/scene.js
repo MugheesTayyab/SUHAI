@@ -112,11 +112,11 @@ function rawMarkup(mode) {
     <!-- energy flow lines, drawn under the buildings -->
     <g class="ss-flows" fill="none" stroke-width="3.2" stroke-linecap="round">
       <path class="ss-flow f-clinic" d="M1000 600 Q 1110 540 1218 596" stroke="#8fd14f"/>
-      <path class="ss-flow f-m" d="M1000 600 Q 1160 520 1312 604" stroke="var(--milk)"/>
-      <path class="ss-flow f-w" d="M1000 600 Q 1200 500 1396 590" stroke="var(--water)"/>
-      <path class="ss-flow f-h" d="M1000 600 Q 1260 500 1500 612" stroke="var(--home)"/>
-      <path class="ss-flow f-i" d="M1000 640 Q 1160 690 1310 742" stroke="var(--irr)"/>
-      <path class="ss-flow f-bat" d="M1142 598 Q 1150 560 1160 560" stroke="var(--battery)" stroke-dasharray="2 7"/>
+      <path class="ss-flow f-m" d="M1000 600 Q 1160 520 1312 604" style="stroke:var(--milk)"/>
+      <path class="ss-flow f-w" d="M1000 600 Q 1200 500 1396 590" style="stroke:var(--water)"/>
+      <path class="ss-flow f-h" d="M1000 600 Q 1260 500 1500 612" style="stroke:var(--home)"/>
+      <path class="ss-flow f-i" d="M1000 640 Q 1160 690 1310 742" style="stroke:var(--irr)"/>
+      <path class="ss-flow f-bat" d="M1142 598 Q 1150 560 1160 560" style="stroke:var(--battery)" stroke-dasharray="2 7"/>
     </g>
 
     <!-- solar array -->

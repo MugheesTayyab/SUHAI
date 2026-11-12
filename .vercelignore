@@ -1,0 +1,4 @@
+# Vercel serves only the static site in web/. Python, results and tests stay in the repo.
+/*
+!/web
+!/vercel.json

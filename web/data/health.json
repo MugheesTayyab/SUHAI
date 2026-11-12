@@ -1,0 +1,1 @@
+{"status":"ok","mode":"recorded","engine":{"python":"3.12.6","qiskit":"2.6.2","qiskit_aer":"0.18.2","simulator":"Aer statevector","ready":true,"ms_per_eval":79.51},"runs":{"compact_1_1":3.72,"compact_1_2":3.74,"compact_2_1":18.44,"compact_2_2":20.77,"compact_3_1":39.39,"compact_3_2":45.72,"slack_1_1":226.84,"slack_2_1":464.23},"built":"2026-11-12 21:51"}

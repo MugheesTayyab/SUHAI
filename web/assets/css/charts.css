@@ -11,16 +11,16 @@
 .chart .ref-line { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 5; }
 .chart .ref-text { fill: var(--ink-2); font-size: 11.5px; }
 .chart .ref-text.strong { fill: var(--green-deep); font-weight: 600; }
-.chart .best-line { stroke: var(--green); stroke-width: 2; stroke-dasharray: 3 4; }
+.chart .best-line { stroke: var(--brand); stroke-width: 2; stroke-dasharray: 3 4; }
 .chart .empty { fill: var(--ink-3); font-size: 13px; }
 
 .chart .raw { stroke: rgba(18, 28, 22, 0.22); stroke-width: 1.2; }
-.chart .best { stroke: var(--green); stroke-width: 2.6; stroke-linejoin: round; }
-.chart .head { fill: var(--lime); stroke: var(--green-deep); stroke-width: 2; }
+.chart .best { stroke: var(--brand); stroke-width: 2.6; stroke-linejoin: round; }
+.chart .head { fill: #fff; stroke: var(--brand); stroke-width: 2; }
 .chart .hover-line { stroke: rgba(18, 28, 22, 0.3); stroke-dasharray: 3 3; }
 .chart .hover-dot { fill: #fff; stroke: var(--ink); stroke-width: 2; }
-.chart .layer-mark { stroke: rgba(46, 107, 60, 0.35); stroke-dasharray: 2 4; }
-.chart .layer-text { fill: var(--green); font-size: 11px; font-weight: 600; }
+.chart .layer-mark { stroke: rgba(91, 60, 245, 0.35); stroke-dasharray: 2 4; }
+.chart .layer-text { fill: var(--brand); font-size: 11px; font-weight: 600; }
 .chart .dot { transition: r 0.3s; }
 
 .legend {

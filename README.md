@@ -56,10 +56,32 @@ Shortcuts in the control room: `R` run, `Esc` stop, `1` to `4` time of day,
 
 ![Control room](docs/screens/control_room.png)
 
+## Put it online (Vercel)
+
+The hosted copy is a static site, so it loads from the CDN with no cold start.
+Vercel cannot run Qiskit inside a request, so the same Python code writes
+everything ahead of time:
+
+```
+python build_static.py           # writes web/data/, records all 10 QAOA runs (about 20 minutes)
+python build_static.py --no-runs # data only, keeps the runs already recorded
+```
+
+Then import the repository in Vercel. `vercel.json` does the rest: no build
+step, `web/` is served as is, `/app` works without `.html`, and `/api/health`
+points at `web/data/health.json` so the page knows it is the hosted copy.
+`.vercelignore` uploads only `web/`.
+
+On the hosted copy everything the browser checks is real. Schedules are scored
+from the table Python wrote, and `tests/test_static.py` proves it matches Python
+on all 4,096 schedules. QAOA runs are real Qiskit Aer runs, recorded once and
+replayed step by step with their own timings. The page says so. For live runs on
+stage, use `python serve.py`. The same pages then talk to Qiskit directly.
+
 ## Reproduce every result
 
 ```
-python -m pytest tests -q        # 30 checks (18 core, 12 web API), about 20 seconds
+python -m pytest tests -q        # 34 checks (18 core, 12 web API, 4 hosted copy), about 50 seconds
 python run_all.py                # all tables and charts, about 10 minutes
 python run_all.py --quick        # skips the slow 20 qubit runs, about 4 minutes
 ```
@@ -95,10 +117,14 @@ Random seeds are fixed. Small differences between machines are normal.
 | `src/figures.py` | Charts and architecture diagram |
 | `run_all.py` | One command that reproduces everything |
 | `serve.py` | Starts the web app |
+| `build_static.py` | Writes `web/data/` for the hosted copy and records the QAOA runs |
+| `vercel.json`, `.vercelignore` | Hosting setup, static only |
 | `server/engine.py` | Reshapes answers from `src/` for the browser, runs live QAOA jobs on a worker thread |
 | `server/app.py` | FastAPI routes, request checks, live progress stream (server sent events) |
 | `web/` | Story page and control room. Plain HTML, CSS and JavaScript, no build step |
+| `web/assets/js/api.js` | Talks to the live server, or to `web/data/` on the hosted copy |
 | `tests/test_server.py` | Proves the API returns the same answers as the report |
+| `tests/test_static.py` | Proves the hosted copy says exactly what the live server says |
 
 ## Honest limitations
 
@@ -112,7 +138,7 @@ Random seeds are fixed. Small differences between machines are normal.
 ## Credits
 
 * Qiskit and Qiskit Aer (IBM), NumPy, SciPy, Matplotlib.
-* Web app: FastAPI and Uvicorn. Fonts from Google Fonts (Manrope, Inter, JetBrains Mono).
+* Web app: FastAPI and Uvicorn. Font from Google Fonts (Geist).
   Charts and the village illustration are hand written SVG, no chart library.
 * No tutorial code was copied. Development was assisted by an AI coding
   assistant. All code was reviewed and run by the team.

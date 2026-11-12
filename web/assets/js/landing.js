@@ -3,11 +3,14 @@ import { initMotion, segmented, tip, toast, countTo } from "./motion.js";
 import { groupedBars, dotStrip, scheduleGrid, bitsOf } from "./charts.js";
 import { renderSlots, escapeHtml } from "./ui.js";
 import { hillSVG } from "./hill.js";
+import { playIntro } from "./intro.js";
+import { createRegister } from "./register.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const SWATCH = { m: "m", i: "i", w: "w", h: "h" };
 
 $("#hero-art").innerHTML = hillSVG();
+playIntro();
 initMotion();
 
 /* ---------- The day, as one table ---------- */
@@ -55,14 +58,14 @@ async function space() {
   });
 }
 
-/* ---------- Method: encoding toggle and the 16 fines ---------- */
+/* ---------- Method: the encoding toggle ---------- */
 
-const HELPERS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"];
+const HELPERS = 9;
 
 async function method() {
   const scn = await api.scenario(1);
-  $("#qubits").innerHTML = scn.variables.map((v) => `<span class="qb${v.kind === "battery" ? " bat" : ""}" title="${v.label}">${v.var}</span>`).join("")
-    + HELPERS.map((h) => `<span class="qb helper" title="Helper qubit that only counts unused energy">${h}</span>`).join("");
+  $("#qubits").innerHTML = scn.variables.map((v) => `<span class="qb ${v.kind === "battery" ? "bat" : v.service}" title="${escapeHtml(v.label)}"></span>`).join("")
+    + Array.from({ length: HELPERS }, (_, k) => `<span class="qb helper" style="--k:${k}" title="Helper qubit that only counts spare energy"></span>`).join("");
 
   let stats;
   try { stats = await api.circuit(1, 12); } catch { stats = (await api.evidence()).circuit_stats; }
@@ -83,10 +86,6 @@ async function method() {
   };
   segmented($("#enc-toggle"), set);
   set("compact");
-
-  const fines = await api.fines(1, 12);
-  $("#fines").innerHTML = fines.fines.map((f) =>
-    `<li class="${f.order >= 3 ? "three" : ""}"><code>${escapeHtml(f.code)}</code><span>${escapeHtml(f.plain)}</span></li>`).join("");
 }
 
 /* ---------- Results, every figure tied to the recorded run ---------- */
@@ -97,16 +96,12 @@ async function results() {
   const c1 = fair.compact.find((r) => r.reps === 1);
   const s1 = fair.slack.find((r) => r.reps === 1);
 
-  const figs = document.querySelectorAll(".figure .big");
-  if (c1) figs[0].dataset.count = (c1.valid_share * 100).toFixed(1);
-  if (depth[2]) figs[1].dataset.count = (depth[2].valid_share * 100).toFixed(1);
-  figs[2].dataset.count = String(Math.max(...depth.map((r) => r.gap_to_exact ?? 0)));
-  figs.forEach((f) => { if (f.classList.contains("in")) countTo(f, Number(f.dataset.count), { suffix: f.dataset.suffix || "", decimals: f.dataset.decimals != null ? Number(f.dataset.decimals) : 0 }); });
-  if (s1) $("#r-std").textContent = fmt.pct(s1.valid_share);
-  $("#r-rand").textContent = fmt.pct(rnd.valid_share);
-  if (c1 && s1) $("#results h2 .muted").textContent = `${(c1.valid_share / s1.valid_share).toFixed(1)} times the valid samples.`;
+  if (c1 && s1) duel(ev, c1, s1);
+  $("#cl-best").textContent = ev.exact.benefit;
+  try { const ex = await api.exact(1); $("#cl-ms").textContent = `${Math.max(1, Math.round(ex.milliseconds))} ms`; } catch { /* keep 1 ms */ }
+  if (c1 && s1) $("#ratio").textContent = `${(c1.valid_share / s1.valid_share).toFixed(1)} times the valid answers.`;
   const shares = depth.map((r) => r.optimum_share * 100);
-  $("#rare-text").textContent = `The exact best appears in ${Math.floor(Math.min(...shares))} to ${Math.ceil(Math.max(...shares))} percent of samples. We find it by keeping the best valid sample out of 4,096.`;
+  $("#rare-text").textContent = `It appears in ${Math.floor(Math.min(...shares))} to ${Math.ceil(Math.max(...shares))} percent of answers. We keep the best valid one out of 4,096.`;
 
   const once = (id, fn) => {
     const fig = $(`#${id}`).closest("figure");
@@ -117,7 +112,7 @@ async function results() {
   once("chart-fair", () => groupedBars($("#chart-fair"), {
     groups: ["1 layer", "2 layers"],
     series: [
-      { name: "Suhai, 11 qubits", color: "var(--green)", values: [1, 2].map((p) => fair.compact.find((r) => r.reps === p)?.valid_share ?? null) },
+      { name: "Suhai, 11 qubits", color: "var(--brand)", values: [1, 2].map((p) => fair.compact.find((r) => r.reps === p)?.valid_share ?? null) },
       { name: "Standard, 20 qubits", color: "var(--slate)", values: [1, 2].map((p) => fair.slack.find((r) => r.reps === p)?.valid_share ?? null) },
     ],
     reference: { value: rnd.valid_share, label: `Random ${fmt.pct(rnd.valid_share)}` },
@@ -125,7 +120,7 @@ async function results() {
   }));
   once("chart-depth", () => groupedBars($("#chart-depth"), {
     groups: depth.map((r) => `${r.reps} layer${r.reps > 1 ? "s" : ""}`),
-    series: [{ name: "Suhai, exact best share", color: "var(--green)", values: depth.map((r) => r.optimum_share), note: "Share of 4,096 samples that were exactly the best day" }],
+    series: [{ name: "Suhai, exact best share", color: "var(--brand)", values: depth.map((r) => r.optimum_share), note: "Share of 4,096 samples that were exactly the best day" }],
     reference: { value: rnd.optimum_share, label: "Random 0.05%" },
     format: (v) => `${(v * 100).toFixed(2)}%`,
     height: 220,
@@ -134,6 +129,52 @@ async function results() {
   $("#fc-max").textContent = fc.max;
   $("#fc-best").textContent = fc.reaching_best;
   once("chart-fcfs", () => dotStrip($("#chart-fcfs"), { rows: fc.orders, best: fc.best, height: 150 }));
+}
+
+/* ---------- Head to head: Suhai against the standard encoding ---------- */
+
+function duel(ev, c1, s1) {
+  const cs = ev.circuit_stats;
+  // [label, Suhai, Standard, how to print, lower is better]
+  const rows = [
+    ["Qubits", cs.compact.qubits, cs.slack.qubits, (v) => v, true],
+    ["Two qubit gates per layer", cs.compact.two_qubit_gates, cs.slack.two_qubit_gates, (v) => v, true],
+    ["Answers that keep every rule", c1.valid_share, s1.valid_share, (v) => fmt.pct(v), false],
+    ["Answers that are the best day", c1.optimum_share, s1.optimum_share, (v) => fmt.pct(v, 2), false],
+    ["Simulator time for one layer", c1.seconds, s1.seconds, (v) => `${v < 10 ? v.toFixed(1) : Math.round(v)} s`, true],
+    ["Best day found", c1.best_valid_benefit, s1.best_valid_benefit, (v) => v, false],
+  ];
+  const box = $("#duel");
+  box.insertAdjacentHTML("beforeend", rows.map(([label, a, b, f, low], k) => {
+    const max = Math.max(a, b) || 1;
+    const win = a === b ? "" : (low ? a < b : a > b) ? "a" : "b";
+    const cell = (v, who) => `<span class="duel-cell${win === who ? " win" : ""}"><b class="num">${f(v)}</b><i style="--w:${(v / max).toFixed(3)}"></i></span>`;
+    return `<div class="duel-row" style="--k:${k}"><span class="duel-label">${label}${low ? "<small>lower is better</small>" : ""}</span>${cell(a, "a")}${cell(b, "b")}</div>`;
+  }).join(""));
+}
+
+/* ---------- The register motif ---------- */
+
+async function registers() {
+  const [scn, ex] = await Promise.all([api.scenario(1), api.exact(1)]);
+  [["#hero-reg", 0], ["#close-reg", 1600]].forEach(([sel, offset]) => {
+    const el = $(sel);
+    if (!el) return;
+    const reg = createRegister(el, scn, { labels: false });
+    let visible = false, timer = 0;
+    // Superposition, then a measurement that lands on the best day, then back again.
+    const cycle = () => {
+      if (!visible) return;
+      reg.superpose();
+      timer = setTimeout(() => reg.collapse(ex.view.bits, { step: 70 }).then(() => { timer = setTimeout(cycle, 2600); }), 2600);
+    };
+    new IntersectionObserver(([e]) => {
+      const was = visible;
+      visible = e.isIntersecting;
+      if (visible && !was) timer = setTimeout(cycle, offset);
+      if (!visible) clearTimeout(timer);
+    }).observe(el);
+  });
 }
 
 /* ---------- What if ---------- */
@@ -154,7 +195,10 @@ async function whatif() {
   await render(1);
 }
 
-Promise.allSettled([dayTable(), space(), method(), results(), whatif()]).then((r) => {
+// The hosted copy has no Python server, so there are no interactive API docs to link to.
+api.mode().then((m) => { if (m === "recorded") $("#api-link")?.remove(); });
+
+Promise.allSettled([dayTable(), space(), method(), results(), whatif(), registers()]).then((r) => {
   if (r.some((x) => x.status === "rejected")) {
     console.error(r.filter((x) => x.status === "rejected"));
     toast("The server did not answer. Start it with python serve.py", "bad");

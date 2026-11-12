@@ -51,7 +51,7 @@ export function liveTrace(container, { height = 230 } = {}) {
     hoverLine = el("line", { class: "hover-line", y1: f.y1, y2: f.y0, opacity: 0 }, f.svg);
     hoverDot = el("circle", { r: 5, class: "hover-dot", opacity: 0 }, f.svg);
     emptyText = el("text", { x: (f.x0 + f.x1) / 2, y: (f.y0 + f.y1) / 2, class: "empty", "text-anchor": "middle" }, f.svg);
-    emptyText.textContent = "Press Run and watch the optimiser search for better angles";
+    emptyText.textContent = "Press Run to watch the circuit improve";
     const hit = el("rect", { x: f.x0, y: f.y1, width: f.x1 - f.x0, height: f.y0 - f.y1, fill: "transparent" }, f.svg);
     hit.addEventListener("pointermove", hover);
     hit.addEventListener("pointerleave", () => { tip.hide(); hoverLine.setAttribute("opacity", 0); hoverDot.setAttribute("opacity", 0); });
@@ -81,7 +81,7 @@ export function liveTrace(container, { height = 230 } = {}) {
       el("line", { x1: f.x0, x2: f.x1, y1: s.y(v), y2: s.y(v) }, grid);
       el("text", { x: f.x0 - 8, y: s.y(v) + 4, "text-anchor": "end" }, grid).textContent = v.toFixed(1);
     });
-    el("text", { x: f.x0, y: f.y0 + 20, class: "axis-title" }, grid).textContent = "Circuit evaluations";
+    el("text", { x: f.x0, y: f.y0 + 20, class: "axis-title" }, grid).textContent = "Circuit cost, lower is better";
     el("text", { x: f.x1, y: f.y0 + 20, "text-anchor": "end", class: "axis-title" }, grid).textContent = `${points.length.toLocaleString()} so far`;
     layerMarks.forEach((m) => {
       const x = s.x(m.index);
@@ -208,7 +208,7 @@ export function dotStrip(container, { rows, best, height = 170, color = "var(--s
     rows.forEach((r, k) => {
       const level = (stacks[r.benefit] = (stacks[r.benefit] || 0) + 1) - 1;
       const cy = f.y0 - 12 - level * 15;
-      const c = el("circle", { cx: x(r.benefit), cy, r: 6, fill: r.benefit === best ? "var(--green)" : color, stroke: "var(--paper)", "stroke-width": 2, class: "dot pop" }, f.svg);
+      const c = el("circle", { cx: x(r.benefit), cy, r: 6, fill: r.benefit === best ? "var(--green)" : color, stroke: "var(--surface)", "stroke-width": 2, class: "dot pop" }, f.svg);
       c.style.animationDelay = `${k * 30}ms`;
       const hit = el("circle", { cx: x(r.benefit), cy, r: 10, fill: "transparent" }, f.svg);
       hit.addEventListener("pointermove", (e) => tip.show(`<b>Benefit ${r.benefit}</b><hr><div class="k">Arrival order</div>${r.order.map((n, i) => `${i + 1}. ${n}`).join("<br>")}`, e.clientX, e.clientY));
@@ -255,7 +255,7 @@ export function histogram(container, { rows, invalid, shots, best, height = 150 
    nothing while idle.
 --------------------------------------------------------------------------- */
 
-export function scheduleGrid(canvas, { landscape, cols = 64, density = null, onHover, onClick }) {
+export function scheduleGrid(canvas, { landscape, cols = 64, density = null, sweep = false, onHover, onClick }) {
   const ctx = canvas.getContext("2d");
   const n = landscape.feasible.length;
   const rows = Math.ceil(n / cols);
@@ -269,7 +269,9 @@ export function scheduleGrid(canvas, { landscape, cols = 64, density = null, onH
     const cw = cols * size + (cols - 1) * gap;
     const ch = rows * size + (rows - 1) * gap;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = cw * dpr; canvas.height = ch * dpr;
+    // Resizing a canvas wipes it, so only do it when the size really changed.
+    const pw = Math.round(cw * dpr), ph = Math.round(ch * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
     canvas.style.width = `${cw}px`; canvas.style.height = `${ch}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
@@ -328,12 +330,32 @@ export function scheduleGrid(canvas, { landscape, cols = 64, density = null, onH
   canvas.addEventListener("click", onTap);
 
   let pending = false;
+  let lastW = canvas.parentElement.clientWidth;
   const ro = new ResizeObserver(() => {
-    if (pending || !alive) return;
+    const w = canvas.parentElement.clientWidth;
+    if (pending || !alive || w === lastW) return;
+    lastW = w;
     pending = true;
     requestAnimationFrame(() => { pending = false; layout(); drawAll(); });
   });
-  layout(); drawAll();
+  // New colours wipe across the old ones, column by column, instead of snapping in.
+  function sweepIn(duration = 900) {
+    const t0 = performance.now();
+    let done = 0;
+    const step = (now) => {
+      if (!alive) return;
+      const p = Math.min(1, (now - t0) / duration);
+      const upto = Math.ceil((1 - Math.pow(1 - p, 3)) * cols);
+      for (let c = done; c < upto; c++) for (let r = 0; r < rows; r++) { const k = r * cols + c; if (k < n) cell(k); }
+      done = upto;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (sweep && !reduce && canvas.width) { layout(); sweepIn(); }
+  else { layout(); drawAll(); }
   ro.observe(canvas.parentElement);
 
   return {

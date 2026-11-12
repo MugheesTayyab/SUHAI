@@ -1,0 +1,1 @@
+{"compact":{"qubits":11,"depth":55,"two_qubit_gates":46,"total_gates":166,"helper_qubits":0,"penalty_terms":16},"slack":{"qubits":20,"depth":60,"two_qubit_gates":106,"total_gates":339,"helper_qubits":9,"limits_with_helpers":5},"reps":1}

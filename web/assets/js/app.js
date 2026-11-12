@@ -1,41 +1,44 @@
+// Suhai control room. The qubit register first, then the plan it measured, quantum against
+// classical, every answer checked, and a day you build yourself.
+
 import { api, fmt } from "./api.js";
-import { initMotion, refreshMotion, segmented, tip, toast, countTo } from "./motion.js";
-// Suhai control room
+import { initMotion, segmented, tip, toast, countTo } from "./motion.js";
+import { playIntro } from "./intro.js";
 import { createScene, slotState, SLOT_PHASE } from "./scene.js";
-import { liveTrace, groupedBars, dotStrip, histogram, scheduleGrid, bitsOf } from "./charts.js";
+import { liveTrace, scheduleGrid, bitsOf } from "./charts.js";
 import { SERVICE, renderSlots, slotSentence, escapeHtml } from "./ui.js";
+import { createRegister } from "./register.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+playIntro();
 initMotion();
 
+const PENALTY = 12;
 const state = {
   battery: 1,
   slot: 1,
   encoding: "compact",
   layers: 1,
-  penalty: 12,
-  budget: "quick",
   source: "exact",
   scenario: null,
   exact: null,
   landscape: null,
-  fcfs: null,
-  fines: null,
-  circuit: null,
-  result: null,        // last finished live run
-  resultBattery: null,
-  picked: null,        // a sample picked from the list
   fcfsView: null,
-  labBits: "10100101000",
+  result: null,
+  resultBattery: null,
+  labBits: "00000000000",
   runId: null,
-  closeStream: null,
   running: false,
+  msPerEval: null,
+  recorded: false,     // true on the hosted site, where runs are replayed recordings
+  runTimes: {},
+  speed: 1,
 };
 
 /* ---------------------------------------------------------------------------
-   Engine status
+   Engine
 --------------------------------------------------------------------------- */
 
 async function checkEngine() {
@@ -45,14 +48,19 @@ async function checkEngine() {
     const h = await api.health();
     const e = h.engine;
     if (e.ms_per_eval) state.msPerEval = e.ms_per_eval;
-    if (e.ready) {
+    if (h.mode === "recorded") {
+      state.recorded = true;
+      state.runTimes = h.runs || {};
       dot.className = "dot-live";
-      text.textContent = `Qiskit ${e.qiskit} · Aer ${e.qiskit_aer} · online`;
-    } else {
-      dot.className = "dot-live off";
-      text.textContent = "Qiskit missing";
-      toast(`Qiskit is not available on the server. ${e.error || ""}`, "bad");
+      text.textContent = `Recorded on Qiskit ${e.qiskit}`;
+      $("#engine").title = "This hosted page replays real runs recorded with Qiskit Aer. Run python serve.py for live runs.";
+      $("#status").textContent = "This hosted page replays real Qiskit Aer runs step by step. Start python serve.py to run them live.";
+      $("#rb-label").textContent = "Measure the qubits";
+      return true;
     }
+    dot.className = e.ready ? "dot-live" : "dot-live off";
+    text.textContent = e.ready ? `Qiskit ${e.qiskit} ready` : "Qiskit missing";
+    if (!e.ready) toast(`Qiskit is not available on the server. ${e.error || ""}`, "bad");
     return e.ready;
   } catch {
     dot.className = "dot-live off";
@@ -63,212 +71,202 @@ async function checkEngine() {
 }
 
 /* ---------------------------------------------------------------------------
-   Hero: scene, scrubber, battery
+   The village day
 --------------------------------------------------------------------------- */
 
-const scene = createScene($("#hp-scene"), { mode: "board" });
-$("#overview").addEventListener("pointermove", (e) => {
-  const r = e.currentTarget.getBoundingClientRect();
-  scene.parallax((e.clientX - r.left) / r.width - 0.5, (e.clientY - r.top) / r.height - 0.5);
-});
-
-const slotSeg = segmented($("#slot-seg"), (v) => setSlot(Number(v)));
+const scene = createScene($("#day-scene"), { mode: "board" });
+const sourceSeg = segmented($("#source-seg"), (v) => setSource(v));
 const batterySeg = segmented($("#battery-seg"), (v) => setBattery(Number(v)));
 
 function currentView() {
   if (state.source === "qaoa" && state.result?.best_valid) return state.result.best_valid;
-  if (state.source === "sample" && state.picked) return state.picked;
   if (state.source === "fcfs" && state.fcfsView) return state.fcfsView;
   return state.exact.view;
 }
 
 function setSlot(t, { animate = true } = {}) {
   state.slot = t;
-  slotSeg.set(t);
   const view = currentView();
-  scene[animate ? "animateTo" : "setPhase"](SLOT_PHASE[t], 1300);
+  scene[animate ? "animateTo" : "setPhase"](SLOT_PHASE[t], 1200);
   scene.setActive({ ...slotState(view, t, state.battery), labels: true });
-  const cap = $("#hp-caption");
-  cap.textContent = slotSentence(view.slots[t], view, state.battery);
+  const cap = $("#scene-cap");
+  cap.textContent = `${view.slots[t].name}. ${slotSentence(view.slots[t], view, state.battery)}`;
   cap.style.animation = "none"; void cap.offsetWidth; cap.style.animation = "";
   $$("#plan-slots .slotcol").forEach((c, k) => c.classList.toggle("now", k === t));
 }
 
-function renderHero() {
-  const scn = state.scenario;
-  const solar = scn.slots.reduce((a, s) => a + s.solar_kwh, 0);
-  $("#hp-sub").textContent = `${solar} kWh of sun and ${scn.battery_kwh} kWh of battery for four services.`;
-  const view = currentView();
-  $("#hp-benefit").textContent = view.benefit;
-  $("#hp-benefit-src").textContent = { qaoa: "QAOA best", exact: "exact best", fcfs: "unlucky queue", sample: "picked sample" }[state.source];
-  // A schedule that breaks a rule is not a plan, so it has no gap to report.
-  $("#hp-gap").textContent = view.feasible ? state.exact.benefit - view.benefit : "✕";
-  $("#hp-gap-l").textContent = view.feasible ? "gap to exact best" : "breaks a rule";
-}
-
-async function setBattery(b) {
-  if (state.running) { toast("Wait for the run to finish before changing the battery"); batterySeg.set(state.battery); return; }
-  const previous = state.battery;
-  state.battery = b;
-  try {
-    await loadBase();
-  } catch (e) {
-    state.battery = previous;
-    batterySeg.set(previous);
-    await loadBase().catch(() => {});
-    toast(`Could not switch the battery. ${e.message}`, "bad");
-    return;
-  }
-  if (state.resultBattery !== b) {
-    state.result = null; state.picked = null;
-    resetRunViews();
-    setSource("exact");
-  }
-  toast(b === 2 ? "Battery doubled to 10 kWh. The exact best is now " + state.exact.benefit + "." : "Back to the 5 kWh test instance.");
-}
-
-/* ---------------------------------------------------------------------------
-   Base data for the current battery size
---------------------------------------------------------------------------- */
-
-async function loadBase() {
-  const b = state.battery;
-  const [scenario, exact, landscape, fcfs, fines] = await Promise.all([
-    api.scenario(b), api.exact(b), api.landscape(b), api.fcfs(b), api.fines(b, state.penalty),
-  ]);
-  Object.assign(state, { scenario, exact, landscape, fcfs, fines });
-  const worst = fcfs.orders.reduce((a, r) => (r.benefit < a.benefit ? r : a), fcfs.orders[0]);
-  state.fcfsView = await api.evaluate(worst.bits, b, state.penalty);
-  state.fcfsView.order = worst.order;
-  $("#foot-ms").textContent = `${Math.max(1, Math.round(exact.milliseconds))} ms on this server`;
-  renderHero();
-  renderPlan();
-  drawLandscape();
-  buildSwitches();
-  evaluateLab();
-  setSlot(state.slot, { animate: false });
-}
-
-/* ---------------------------------------------------------------------------
-   KPIs
---------------------------------------------------------------------------- */
-
-async function initKpis() {
-  try {
-    const circuit = await api.circuit(1, 12);
-    state.circuit = circuit;
-    $("#k-qubits").textContent = circuit.compact.qubits;
-    $("#k-qubits-std").textContent = circuit.slack.qubits;
-    $("#k-gates").textContent = circuit.compact.two_qubit_gates;
-    $("#k-gates-std").textContent = circuit.slack.two_qubit_gates;
-  } catch { /* the recorded numbers already on the page stay */ }
-  try {
-    const ev = await api.evidence();
-    const r = ev.depth_study[0];
-    $("#k-valid").textContent = fmt.pct(r.valid_share);
-    $("#k-hits").textContent = Math.round(r.optimum_share * 4096);
-    $("#k-hits-s").textContent = `${fmt.pct(r.optimum_share, 2)} of samples, one layer`;
-    $("#k-valid-s").textContent = `Random guessing gets ${fmt.pct(ev.random_guess.valid_share)}`;
-  } catch { /* keep defaults */ }
-}
-
-function liveKpis(res) {
-  $$("[data-src]").forEach((t) => { t.className = "tag live"; t.textContent = "Live"; });
-  const v = $("#k-valid"); v.dataset.from = parseFloat(v.textContent) || 0;
-  countTo(v, +(res.valid_share * 100).toFixed(1), { suffix: "%", decimals: 1, duration: 900 });
-  const h = $("#k-hits"); h.dataset.from = parseInt(h.textContent.replace(/,/g, ""), 10) || 0;
-  countTo(h, res.exact_hits, { decimals: 0, duration: 900 });
-  $("#k-shots").textContent = fmt.int(res.shots);
-  $("#k-hits-s").textContent = `${fmt.pct(res.optimum_share, 2)} of samples · random would be ${fmt.pct(res.random.optimum_share, 2)}`;
-  $("#k-valid-s").textContent = `Random guessing gets ${fmt.pct(res.random.valid_share)}`;
-  const std = res.params.encoding === "slack";
-  const c = state.circuit;
-  $("#k-qubits").textContent = res.qubits;
-  $("#k-qubits-l").textContent = std ? `including ${res.helper_qubits} helper qubits` : "and zero helper qubits";
-  $("#k-qubits-s").innerHTML = std ? `Suhai needs only <b>${c ? c.compact.qubits : 11}</b>` : `The standard method needs <b>${c ? c.slack.qubits : 20}</b>`;
-  if (c) {
-    $("#k-gates").textContent = std ? c.slack.two_qubit_gates : c.compact.two_qubit_gates;
-    $("#k-gates-s").innerHTML = std ? `Suhai <b>${c.compact.two_qubit_gates}</b>` : `Standard method <b>${c.slack.two_qubit_gates}</b>`;
-  }
-}
-
-/* ---------------------------------------------------------------------------
-   Plan panel
---------------------------------------------------------------------------- */
-
-const sourceSeg = segmented($("#source-seg"), (v) => setSource(v));
-
-function setSource(v) {
-  state.source = v;
-  sourceSeg.set(v);
-  renderPlan();
-  renderHero();
-  setSlot(state.slot);
-}
-
-function renderPlan() {
+function renderDay() {
   const view = currentView();
   renderSlots($("#plan-slots"), view);
   $$("#plan-slots .slotcol").forEach((c, k) => {
     c.classList.toggle("now", k === state.slot);
     c.addEventListener("click", () => setSlot(k));
   });
-  $("#pf-benefit").textContent = view.benefit;
-  $("#pf-battery").textContent = view.battery_used;
-  $("#pf-unserved").textContent = view.unserved.length ? view.unserved.join(", ") : "Nobody";
-  const verdict = $("#pf-verdict");
-  verdict.className = `tag ${view.feasible ? "good" : "bad"}`;
-  verdict.textContent = view.feasible ? "Keeps every rule" : `Breaks ${view.violations.length} rule${view.violations.length > 1 ? "s" : ""}`;
-  const note = $("#plan-note");
+  const num = $("#df-benefit");
+  num.dataset.from = parseInt(num.textContent, 10) || 0;
+  countTo(num, view.benefit, { duration: 600, decimals: 0 });
+
+  const waiting = view.unserved.length ? `${view.unserved.join(" and ").toLowerCase()} ${view.unserved.length > 1 ? "wait" : "waits"}` : "every service runs";
   const r = state.result;
-  note.textContent = {
-    exact: `The exact best, found by checking all ${fmt.int(state.exact.n_total)} days. Only ${state.exact.n_feasible} of them keep every rule.`,
-    qaoa: r && r.best_valid ? `The best valid schedule among ${fmt.int(r.shots)} samples. ${r.best_valid.bits === state.exact.view.bits ? "It is the exact best, the same schedule enumeration found." : `It scores ${r.gap_to_exact} below the exact best.`}` : "",
-    fcfs: state.fcfsView?.order ? `Serve whoever asks first. In this order (${state.fcfsView.order.join(", ")}) the day scores only ${state.fcfsView.benefit}.` : "",
-    sample: state.picked ? `One schedule the circuit returned, checked against the rules.` : "",
+  const where = {
+    exact: `benefit, the best of all ${fmt.int(state.exact.n_total)} days. ${cap(waiting)}.`,
+    qaoa: r?.best_valid ? `benefit, the best valid answer the circuit returned. ${r.best_valid.bits === state.exact.view.bits ? "It matches the exact best." : `${r.gap_to_exact} below the exact best.`}` : "",
+    fcfs: state.fcfsView?.order ? `benefit when whoever asks first is served first, in the unluckiest order. ${cap(waiting)}.` : "",
   }[state.source];
+  $("#df-text").textContent = where;
+  const verdict = $("#df-verdict");
+  verdict.className = `tag ${view.feasible ? "good" : "bad"}`;
+  verdict.textContent = view.feasible ? "Keeps every rule" : "Breaks a rule";
+}
+
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function setSource(v) {
+  state.source = v;
+  sourceSeg.set(v);
+  renderDay();
+  setSlot(state.slot);
+}
+
+async function setBattery(b) {
+  if (state.running) { toast("Wait for the run to finish first"); batterySeg.set(state.battery); return; }
+  const previous = state.battery;
+  state.battery = b;
+  try { await loadBase(); }
+  catch (e) {
+    state.battery = previous; batterySeg.set(previous);
+    await loadBase().catch(() => {});
+    toast(`Could not switch the battery. ${e.message}`, "bad");
+    return;
+  }
+  if (state.resultBattery !== b) { state.result = null; resetRun(); setSource("exact"); }
+  estimate();
 }
 
 /* ---------------------------------------------------------------------------
-   Landscape
+   Base data for one battery size
 --------------------------------------------------------------------------- */
+
+async function loadBase() {
+  const b = state.battery;
+  const [scenario, exact, landscape, fcfs] = await Promise.all([api.scenario(b), api.exact(b), api.landscape(b), api.fcfs(b)]);
+  Object.assign(state, { scenario, exact, landscape });
+  const worst = fcfs.orders.reduce((a, r) => (r.benefit < a.benefit ? r : a), fcfs.orders[0]);
+  state.fcfsView = await api.evaluate(worst.bits, b, PENALTY);
+  state.fcfsView.order = worst.order;
+  const sun = scenario.slots.reduce((a, s) => a + s.solar_kwh, 0);
+  $("#day-sub").textContent = `${sun} kWh of sun and a ${scenario.battery_kwh} kWh battery for four services`;
+  state.fcfs = fcfs;
+  if (!register) register = createRegister($("#register"), scenario);
+  renderDay();
+  renderVersus();
+  drawSpace();
+  buildMatrix();
+  evaluateLab();
+  setSlot(state.slot, { animate: false });
+}
+
+/* ---------------------------------------------------------------------------
+   Every answer, checked
+--------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   The register and its story
+--------------------------------------------------------------------------- */
+
+let register = null;
+const IDLE_TITLE = "Eleven qubits decide who gets the sun.";
+const IDLE_SUB = "Each qubit is one yes or no choice. Until it is measured, the register holds all 2,048 possible days at once.";
+const WHEN = ["in the morning", "at midday", "in the afternoon", "in the evening"];
+
+function headline(title, sub) {
+  const h = $("#q-title"), p = $("#q-sub");
+  if (title && h.textContent !== title) { h.textContent = title; h.classList.remove("title-swap"); void h.offsetWidth; h.classList.add("title-swap"); }
+  if (sub != null) p.textContent = sub;
+}
+
+function describeDay(view) {
+  const parts = view.slots.flatMap((s) => s.services.map((x) => `${x.name.toLowerCase()} ${WHEN[s.index]}${s.battery ? " with the battery" : ""}`));
+  if (!parts.length) return "Nothing runs";
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+  return list.charAt(0).toUpperCase() + list.slice(1);
+}
+
+/* ---------------------------------------------------------------------------
+   Quantum vs classical
+--------------------------------------------------------------------------- */
+
+let evidence = null;
+function renderVersus() {
+  const b = state.battery, ex = state.exact, fc = state.fcfs, r = state.result;
+  const sb = evidence?.same_budget;
+  const recordedRow = (enc, layers) => (b === 1 && sb ? sb[enc].find((x) => x.reps === layers) : null);
+  const mine = (enc) => (r && r.params.encoding === enc && r.params.battery_blocks === b ? r : null);
+  const suhai = mine("compact"), std = mine("slack");
+  // Compare like with like: the same number of layers on both sides when it was recorded.
+  const L = suhai ? suhai.params.layers : std ? std.params.layers : 1;
+  const sRec = recordedRow("compact", L) || recordedRow("compact", 1);
+  const tRec = recordedRow("slack", L) || recordedRow("slack", 1);
+  const q = (live, rec) => live
+    ? { valid: live.valid_share, best: live.best_valid?.benefit ?? null, note: `your ${state.recorded ? "replay" : "run"}, ${live.params.layers} layer${live.params.layers > 1 ? "s" : ""}, ${live.seconds.toFixed(1)} s`, layers: live.params.layers }
+    : rec ? { valid: rec.valid_share, best: rec.best_valid_benefit, note: `recorded, ${rec.reps} layer${rec.reps > 1 ? "s" : ""}, ${rec.seconds.toFixed(1)} s`, layers: rec.reps }
+      : { valid: null, best: null, note: "measure the qubits to compare", layers: null };
+  const S = q(suhai, sRec), T = q(std, tRec);
+  const rows = [
+    { cls: "q" + (suhai ? " mine" : ""), kind: "Quantum", name: "Suhai, 11 qubits", note: S.note, valid: S.valid, best: S.best, bar: "var(--brand)" },
+    { cls: "q" + (std ? " mine" : ""), kind: "Quantum", name: "Standard, 20 qubits", note: T.note, valid: T.valid, best: T.best, bar: "#a99df2" },
+    { cls: "c", kind: "Classical", name: "Check all 2,048 days", note: `exact answer, ${Math.max(1, Math.round(ex.milliseconds))} ms`, valid: 1, best: ex.benefit, bar: "var(--ink)" },
+    { cls: "c", kind: "Classical", name: "First come first served", note: "the unluckiest of 24 arrival orders", valid: 1, best: fc ? fc.min : null, bar: "var(--ink-3)" },
+    { cls: "c", kind: "Baseline", name: "Random guessing", note: "pick any of the 2,048 days", valid: ex.random?.valid_share ?? null, best: null, bar: "var(--coral)" },
+  ];
+  $("#vs-list").innerHTML = rows.map((x) => `
+    <li class="vs-row ${x.cls}">
+      <span class="vs-name"><b>${x.name}<span class="vs-kind">${x.kind}</span></b><small>${x.note}</small></span>
+      <span class="vs-bar" style="--bar:${x.bar}">${x.valid == null ? '<em class="na">not measured</em>' : fmt.pct(x.valid)}<i data-w="${x.valid ?? 0}"></i></span>
+      <span class="vs-best${x.best != null && x.best < ex.benefit ? " short" : ""}">${x.best ?? '<em class="na">none</em>'}</span>
+    </li>`).join("");
+  requestAnimationFrame(() => requestAnimationFrame(() => $$("#vs-list i[data-w]").forEach((i) => i.style.setProperty("--w", i.dataset.w))));
+
+  const el = $("#vs-ratio");
+  if (S.valid != null && T.valid > 0) {
+    el.dataset.from = parseFloat(el.textContent) || 0;
+    countTo(el, +(S.valid / T.valid).toFixed(1), { decimals: 1, suffix: "×", duration: 800 });
+    const fair = S.layers === T.layers;
+    $("#vs-what").textContent = `more valid answers than the standard quantum method${fair ? ` at ${S.layers} layer${S.layers > 1 ? "s" : ""}` : ""}, with 9 fewer qubits`;
+  } else {
+    el.textContent = "9";
+    $("#vs-what").textContent = "fewer qubits than the standard quantum method. Measure the qubits to compare answers.";
+  }
+}
 
 let grid;
-function drawLandscape(density = null) {
+function drawSpace(density = null) {
   if (grid) grid.stop();
-  const canvas = $("#land");
   const land = state.landscape;
-  grid = scheduleGrid(canvas, {
-    landscape: land,
-    density,
+  grid = scheduleGrid($("#land"), {
+    landscape: land, density, sweep: !!density,
     onHover: (k, e) => {
       const n = density ? density[k] : null;
-      const kind = k === land.exact_index ? "The exact best day" : land.feasible[k] ? "Keeps every rule" : "Breaks a rule";
-      tip.show(`<b>Day ${fmt.int(k + 1)}</b><hr>${kind}${land.feasible[k] ? `<div class="row"><span class="k">Objective</span><span>${land.objective[k]}</span></div>` : ""}${n != null ? `<div class="row"><span class="k">Samples here</span><span>${n.toLocaleString()}</span></div>` : ""}<div class="k" style="margin-top:6px">Click to open it in the rule lab</div>`, e.clientX, e.clientY);
+      const kind = k === land.exact_index ? "The best possible day" : land.feasible[k] ? "Keeps every rule" : "Breaks a rule";
+      tip.show(`<b>Day ${fmt.int(k + 1)}</b><hr>${kind}${n != null ? `<div class="row"><span class="k">Times the circuit returned it</span><span>${n.toLocaleString()}</span></div>` : ""}<div class="k" style="margin-top:6px">Click to try it yourself</div>`, e.clientX, e.clientY);
     },
-    onClick: (k) => { setLabBits(bitsOf(k)); $("#lab").scrollIntoView({ behavior: "smooth", block: "start" }); },
+    onClick: (k) => { setLabBits(bitsOf(k)); $("#lab").scrollIntoView({ behavior: "smooth", block: "center" }); },
   });
   $("#land-legend").innerHTML = density
-    ? `<span><i class="lg" style="background:rgba(111,165,30,.9)"></i>Valid days the circuit sampled</span><span><i class="lg bad"></i>Invalid days it sampled</span><span><i class="lg no"></i>Never sampled</span><span><i class="lg best"></i>Exact best</span>`
-    : `<span><i class="lg ok"></i>Keeps every rule</span><span><i class="lg no"></i>Breaks a rule</span><span><i class="lg best"></i>Exact best</span>`;
-  $("#land-note").textContent = density
-    ? `Brighter squares were sampled more often. ${fmt.pct(state.result.valid_share)} of all samples landed on a valid day, against ${fmt.pct(state.landscape.n_feasible / 2048)} for random guessing.`
-    : `All 2,048 possible days. Green squares keep every rule. The gold one is the best.`;
+    ? `<span><i class="lg ok"></i>Valid answers it returned</span><span><i class="lg bad"></i>Answers that broke a rule</span><span><i class="lg best"></i>Best day</span>`
+    : `<span><i class="lg ok"></i>Keeps every rule</span><span><i class="lg no"></i>Breaks a rule</span><span><i class="lg best"></i>Best day</span>`;
+  $("#space-sub").textContent = density
+    ? `Darker squares came back more often. ${fmt.pct(state.result.valid_share)} of answers kept every rule, against ${fmt.pct(land.n_feasible / 2048)} for random guessing.`
+    : `All 2,048 possible days. Only ${land.n_feasible} keep every rule and gold is the best.`;
 }
 
 /* ---------------------------------------------------------------------------
-   Live run
+   Quantum planner
 --------------------------------------------------------------------------- */
 
-const trace = liveTrace($("#trace"));
+const trace = liveTrace($("#trace"), { height: 170 });
 const encSeg = segmented($("#enc-seg"), (v) => { state.encoding = v; guardStandard(); estimate(); });
 const layersSeg = segmented($("#layers-seg"), (v) => { state.layers = Number(v); estimate(); });
-const penaltySeg = segmented($("#penalty-seg"), async (v) => {
-  state.penalty = Number(v);
-  state.fines = await api.fines(state.battery, state.penalty);
-  evaluateLab();
-  estimate();
-});
 
 function guardStandard() {
   const std = state.encoding === "slack";
@@ -277,365 +275,221 @@ function guardStandard() {
 }
 
 function estimate() {
-  const b = state.budget === "quick" ? { starts: 3, iters: 150 } : { starts: 8, iters: 300 };
-  const label = `${b.starts} starts × ${b.iters} steps`;
-  if (state.encoding === "slack") {
-    $("#estimate").textContent = `Several minutes on this machine · 20 qubits · ${label}`;
+  if (state.running) return;
+  if (state.recorded) {
+    const secs = state.runTimes[`${state.encoding}_${state.layers}_${state.battery}`];
+    $("#rb-hint").textContent = secs == null ? "not recorded" : secs > 14 ? "sped up to 14 s" : `${secs.toFixed(1)} s`;
     return;
   }
-  // COBYLA stops early when there are few angles. Measured here, about 50 evaluations per start
-  // at one layer, and the full step budget from two layers on.
+  if (state.encoding === "slack") { $("#rb-hint").textContent = "several minutes"; return; }
+  // COBYLA stops early with few angles. About 50 evaluations per start at one layer, the full budget later.
   let evals = 0;
-  for (let p = 1; p <= state.layers; p++) evals += b.starts * Math.min(b.iters, 50 * p * p);
-  const ms = state.msPerEval || 25;
-  const secs = Math.max(1, Math.round((evals * ms) / 1000 + 0.6 * state.layers));
-  const when = secs < 60 ? `About ${secs} second${secs === 1 ? "" : "s"}` : `About ${Math.round(secs / 60)} minute${secs >= 90 ? "s" : ""}`;
-  $("#estimate").textContent = `${when} on this machine · ${label} · 4,096 shots`;
+  for (let p = 1; p <= state.layers; p++) evals += 3 * Math.min(150, 50 * p * p);
+  const secs = Math.max(1, Math.round((evals * (state.msPerEval || 25)) / 1000 + 0.6 * state.layers));
+  $("#rb-hint").textContent = secs < 60 ? `about ${secs} s` : `about ${Math.round(secs / 60)} min`;
 }
 
-let timerHandle, startedAt;
+function say(text) {
+  const s = $("#status");
+  if (s.textContent === text) return;
+  s.textContent = text;
+}
+
+let timer, startedAt;
 function setRunning(on) {
   state.running = on;
   const btn = $("#run-btn");
   btn.classList.toggle("running", on);
-  btn.querySelector(".run-label").textContent = on ? "Running" : "Run again";
-  btn.querySelector(".arrow").textContent = on ? "◌" : "→";
-  $("#run-top").disabled = on;
-  $("#cancel-btn").hidden = !on;
-  $$(".controls .seg button").forEach((b) => { if (on) b.dataset.wasDisabled = b.disabled; b.disabled = on || b.dataset.wasDisabled === "true"; });
-  if (!on) { guardStandard(); $$(".controls .seg button").forEach((b) => delete b.dataset.wasDisabled); }
-  clearInterval(timerHandle);
+  $("#rb-label").textContent = on ? "Stop" : "Measure again";
+  $$(".controls .seg button").forEach((b) => { if (on) b.dataset.was = b.disabled; b.disabled = on || b.dataset.was === "true"; });
+  if (!on) { $$(".controls .seg button").forEach((b) => delete b.dataset.was); guardStandard(); estimate(); }
+  clearInterval(timer);
   if (on) {
     startedAt = performance.now();
-    timerHandle = setInterval(() => { $("#run-timer").textContent = `${((performance.now() - startedAt) / 1000).toFixed(1)} s`; }, 100);
+    timer = setInterval(() => { $("#rb-hint").textContent = `${((performance.now() - startedAt) / 1000).toFixed(1)} s`; }, 100);
   }
 }
 
-function setStage(name) {
-  const order = ["build", "optimise", "sample", "check"];
-  const k = order.indexOf(name);
-  $$("#stage .st").forEach((s, i) => {
-    s.classList.toggle("on", i === k);
-    s.classList.toggle("done", k >= 0 && i < k || name === "complete");
-  });
-}
-
-function setTag(text, cls = "") {
-  const t = $("#run-tag");
-  t.className = `tag ${cls}`;
-  t.textContent = text;
-}
+function setFill(p) { $("#rb-fill").style.transform = `scaleX(${Math.max(0, Math.min(1, p))})`; }
 
 async function startRun() {
   if (state.running) return;
-  const params = {
-    encoding: state.encoding, layers: state.layers, penalty: state.penalty,
-    battery_blocks: state.battery, budget: state.budget, shots: 4096, seed: 42,
-  };
+  const params = { encoding: state.encoding, layers: state.layers, penalty: PENALTY, battery_blocks: state.battery, budget: "quick", shots: 4096, seed: 42 };
   trace.reset();
-  $("#layer-chips").innerHTML = "";
-  $("#progress-bar").style.width = "2%";
-  setStage("build");
-  setTag("Starting", "sun");
-  $("#run-status-text").textContent = "Building the QAOA circuit from the cost operator.";
+  setFill(0.02);
   setRunning(true);
-  document.getElementById("run").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $("#trace-shell").classList.add("open");
+  register.superpose(true);
+  headline("The circuit is learning.", "Every qubit is still every option at once. The optimiser tunes the circuit so the best days become the likely ones.");
+  say("Building the circuit from the cost of every rule.");
 
   let run;
-  try {
-    run = await api.startRun(params);
-  } catch (e) {
-    setRunning(false); setTag("Error", "bad"); setStage("");
-    toast(e.message, "bad");
-    return;
-  }
+  try { run = await api.startRun(params); }
+  catch (e) { setRunning(false); setFill(0); toast(e.message, "bad"); return; }
   state.runId = run.id;
-  const budget = state.budget === "quick" ? { starts: 3, iters: 150 } : { starts: 8, iters: 300 };
-  const totalLayers = params.layers;
-  let currentReps = 0;
-  let lastText = 0;
-  let curStart = -1;
-  let startEvals = 0;
+  const iters = 150;
+  let reps = 0, curStart = -1, startEvals = 0, lastSay = 0;
 
-  state.closeStream = api.follow(run.id, {
+  state.speed = 1;
+  api.follow(run.id, {
+    onSpeed: (x) => { state.speed = x; },
     onEvent: async (kind, data) => {
-      if (kind === "queued" && data.position > 1) $("#run-status-text").textContent = `Waiting for ${data.position - 1} earlier run to finish.`;
-      if (kind === "started") {
-        setTag("Running", "live");
-        $("#run-status-text").textContent = data.helper_qubits
-          ? `${data.qubits} qubits. ${data.helper_qubits} of them are helper qubits that only count leftover energy.`
-          : `${data.qubits} qubits, no helpers, ${data.penalty_terms} fines. Tuning the angles now.`;
-      }
+      if (kind === "queued" && data.position > 1) say("Waiting for an earlier run to finish.");
+      if (kind === "started") say(data.helper_qubits
+        ? `${data.qubits} qubits, ${data.helper_qubits} of them helpers that only count leftover energy.`
+        : `${data.qubits} qubits, one per decision. Tuning the angles.`);
       if (kind === "optimise") {
-        if (data.reps !== currentReps) {
-          currentReps = data.reps;
-          curStart = -1;
-          if (currentReps > 1) trace.layer(currentReps);
-          setStage("optimise");
-        }
+        if (data.reps !== reps) { reps = data.reps; curStart = -1; if (reps > 1) trace.layer(reps); }
         trace.push({ y: data.energy, start: data.start, reps: data.reps });
-        // Rough progress: layers done, then starting points done, then steps inside one start.
         if (data.start !== curStart) { curStart = data.start; startEvals = 0; }
         startEvals++;
-        const perLayer = 1 / totalLayers;
-        const inLayer = (data.start + Math.min(1, startEvals / budget.iters)) / data.n_starts;
-        const p = ((currentReps - 1) + inLayer * 0.92) * perLayer;
-        $("#progress-bar").style.width = `${Math.min(98, 3 + p * 95)}%`;
+        const inLayer = (data.start + Math.min(1, startEvals / iters)) / data.n_starts;
+        setFill(0.03 + (((reps - 1) + inLayer * 0.92) / params.layers) * 0.92);
         const now = performance.now();
-        if (now - lastText > 120) {
-          lastText = now;
-          $("#run-status-text").textContent = `Layer ${data.reps} of ${totalLayers} · starting point ${data.start + 1} of ${data.n_starts} · cost ${data.energy.toFixed(3)}`;
-        }
+        if (now - lastSay > 400) { lastSay = now; say(`Tuning layer ${data.reps} of ${params.layers}, attempt ${data.start + 1} of ${data.n_starts}.`); }
       }
-      if (kind === "sample") {
-        setStage("sample");
-        $("#run-status-text").textContent = `Measuring the tuned circuit ${fmt.int(data.shots)} times.`;
-      }
-      if (kind === "layer_done") {
-        setStage("check");
-        const chip = document.createElement("span");
-        chip.className = "lchip";
-        chip.innerHTML = `<b>${data.reps} layer${data.reps > 1 ? "s" : ""}</b><span>${fmt.pct(data.valid_share)} valid</span><span>${fmt.pct(data.optimum_share, 2)} exact best</span><span class="muted">${data.seconds.toFixed(1)} s</span>`;
-        $("#layer-chips").append(chip);
-      }
+      if (kind === "sample") { say(`Measuring the tuned circuit ${fmt.int(data.shots)} times.`); headline("Measuring.", null); }
+      if (kind === "layer_done") say("Checking every answer against the rules.");
       if (kind === "done") {
-        try {
-          const full = await api.getRun(run.id);
-          finishRun(full.result);
-        } catch (e) { toast(e.message, "bad"); }
+        try { finishRun((await api.getRun(run.id)).result); } catch (e) { toast(e.message, "bad"); }
         setRunning(false);
       }
-      if (kind === "failed") {
-        setRunning(false); setTag("Failed", "bad"); setStage("");
-        $("#run-status-text").textContent = data.error;
-        toast(data.error, "bad");
-      }
-      if (kind === "cancelled") {
-        setRunning(false); setTag("Stopped"); setStage("");
-        $("#progress-bar").style.width = "0";
-        $("#run-status-text").textContent = "Run stopped. Nothing from it is shown.";
-      }
+      if (kind === "failed") { setRunning(false); setFill(0); register.superpose(); say(data.error); toast(data.error, "bad"); }
+      if (kind === "cancelled") { setRunning(false); setFill(0); register.superpose(); headline(IDLE_TITLE, IDLE_SUB); say("Stopped. Nothing from that run is shown."); }
     },
-    onError: (e) => { setRunning(false); setTag("Error", "bad"); toast(e.message, "bad"); },
+    onError: (e) => { setRunning(false); setFill(0); toast(e.message, "bad"); },
   });
 }
 
-async function cancelRun() {
+async function stopRun() {
   if (!state.running || !state.runId) return;
   try { await api.cancelRun(state.runId); } catch (e) { toast(e.message, "bad"); }
 }
 
 function finishRun(res) {
-  if (res.params.encoding === "compact" && trace.size) {
-    state.msPerEval = Math.max(1, (res.seconds * 1000 - 600 * res.params.layers) / trace.size);
-    estimate();
-  }
+  if (!state.recorded && res.params.encoding === "compact" && trace.size) state.msPerEval = Math.max(1, (res.seconds * 1000 - 600 * res.params.layers) / trace.size);
   state.result = res;
   state.resultBattery = res.params.battery_blocks;
-  $("#progress-bar").style.width = "100%";
-  setStage("complete");
-  setTag("Done", "good");
-  $("#run-timer").textContent = `${res.seconds.toFixed(1)} s`;
-  const enc = res.params.encoding === "compact" ? "Suhai" : "Standard";
-  $("#run-status-text").textContent = `${enc} encoding, ${res.qubits} qubits, ${res.params.layers} layer${res.params.layers > 1 ? "s" : ""}. ${fmt.int(res.shots)} samples, ${fmt.int(res.distinct)} different days, every one checked.`;
+  setFill(1);
+  setTimeout(() => { if (!state.running) setFill(0); }, 900);
 
+  if (res.best_valid) {
+    register.collapse(res.best_valid.bits).then(() => {
+      const same = res.best_valid.bits === res.exact.view.bits;
+      headline("Measured. Here is the day.", `${describeDay(res.best_valid)}. Benefit ${res.best_valid.benefit}${same ? ", the same day that checking all 2,048 finds." : `, ${res.gap_to_exact} below the exact best.`}`);
+    });
+  } else {
+    register.superpose();
+    headline("No valid day came back.", "Every measured day broke a rule. More circuit layers usually fix this.");
+  }
+  renderVersus();
+  say(`${fmt.int(res.shots)} answers came back, ${fmt.int(res.distinct)} of them different. Every one was checked.${state.recorded ? state.speed > 1 ? ` Replayed ${state.speed.toFixed(0)} times faster than recorded.` : " Replayed at its recorded speed." : ""}`);
   $$("#source-seg button").forEach((b) => { if (b.dataset.value === "qaoa") b.disabled = !res.best_valid; });
   if (res.best_valid) setSource("qaoa");
-  liveKpis(res);
-  renderSamples(res);
-  drawLandscape(res.density);
-
-  if (!res.best_valid) toast("No valid schedule was sampled. Try more layers or a bigger penalty.", "bad");
-  else if (res.best_valid.bits === res.exact.view.bits) toast(`Best valid sample scores ${res.best_valid.benefit}. It is the exact best schedule.`);
-  else toast(`Best valid sample scores ${res.best_valid.benefit}, ${res.gap_to_exact} below the exact best.`);
+  drawSpace(res.density);
+  if (!res.best_valid) toast("No valid day came back. Try more layers.", "bad");
 }
 
-function resetRunViews() {
+function resetRun() {
   trace.reset();
-  $("#layer-chips").innerHTML = "";
-  $("#progress-bar").style.width = "0";
-  setStage("");
-  setTag("Idle");
-  $("#run-timer").textContent = "0.0 s";
-  $("#run-status-text").textContent = "QAOA on the Aer statevector simulator. Pick a setup and press Run.";
-  $("#sample-list").innerHTML = `<li class="empty-row">Run QAOA and the top schedules land here, each one checked against the rules.</li>`;
-  $("#hist").innerHTML = "";
-  $("#hist-head").innerHTML = "";
-  $("#samples-tag").className = "tag"; $("#samples-tag").textContent = "No run yet";
-  $$("#source-seg button").forEach((b) => { if (b.dataset.value === "qaoa" || b.dataset.value === "sample") b.disabled = true; });
+  setFill(0);
+  $("#trace-shell").classList.remove("open");
+  register?.superpose();
+  headline(IDLE_TITLE, IDLE_SUB);
+  renderVersus();
+  say("Qiskit tunes the circuit, measures it 4,096 times and keeps the best day that breaks no rule.");
+  $$("#source-seg button").forEach((b) => { if (b.dataset.value === "qaoa") b.disabled = true; });
 }
+
+$("#run-btn").addEventListener("click", () => (state.running ? stopRun() : startRun()));
 
 /* ---------------------------------------------------------------------------
-   Samples
+   Try your own day
 --------------------------------------------------------------------------- */
 
-const GROUPS = ["m", "m", "i", "i", "w", "w", "h", "d", "d", "d", "d"];
-function bitHtml(bits) {
-  return `<span class="bitstr">${bits.split("").map((b, i) => `${i === 7 ? '<span class="gap"></span>' : ""}<span class="g-${GROUPS[i]}${b === "1" ? " on" : ""}">${b}</span>`).join("")}</span>`;
-}
-
-function renderSamples(res) {
-  $("#samples-tag").className = "tag live";
-  $("#samples-tag").textContent = `${fmt.int(res.distinct)} distinct days`;
-  $("#samples-note").textContent = `Top ${res.top_samples.length} of ${fmt.int(res.distinct)} different schedules in ${fmt.int(res.shots)} samples. Click one to inspect it.`;
-  histogram($("#hist"), { rows: res.benefit_histogram, invalid: res.invalid_shots, shots: res.shots, best: state.exact.benefit });
-  const top = res.top_samples[0].count;
-  $("#sample-list").innerHTML = res.top_samples.map((s, k) => {
-    const cls = s.is_exact ? "best" : s.feasible ? "" : "bad";
-    const tag = s.is_exact ? `<span class="tag sun">Exact best</span>` : s.feasible ? `<span class="tag good">Valid · ${s.benefit}</span>` : `<span class="tag bad">${s.violations.length} broken</span>`;
-    return `<li class="srow ${cls}" style="--k:${k}" data-bits="${s.bits}" title="${escapeHtml(s.feasible ? "Keeps every rule" : s.violations.join(". "))}">
-      <span class="rk">${k + 1}</span>${bitHtml(s.bits)}
-      <span class="sbar"><i style="width:${(s.count / top) * 100}%"></i></span>
-      <span class="meta"><span class="num muted">${fmt.pct(s.share, 2)}</span>${tag}</span>
-    </li>`;
+function buildMatrix() {
+  const scn = state.scenario;
+  const vars = scn.variables;
+  const SHORT_SLOT = ["Morn", "Noon", "Aft", "Eve"];
+  const SHORT_SVC = { m: "Milk", i: "Irrigation", w: "Water", h: "Homes" };
+  const head = `<span></span>${scn.slots.map((s) => `<span class="mx-head"><span class="full">${s.name}</span><span class="short">${SHORT_SLOT[s.index]}</span><small>${s.solar_kwh ? `${s.solar_kwh} kWh sun` : "no sun"}</small></span>`).join("")}`;
+  const rows = scn.services.map((svc) => {
+    const cells = scn.slots.map((s) => {
+      const k = vars.findIndex((v) => v.kind === "service" && v.service === svc.key && v.slot === s.index);
+      if (k < 0) return `<span class="mx-none"></span>`;
+      return `<button class="mx-cell" data-k="${k}" style="--c:${SERVICE[svc.key].color}" aria-label="${escapeHtml(vars[k].label)}" title="Worth ${vars[k].benefit}">+${vars[k].benefit}</button>`;
+    }).join("");
+    return `<span class="mx-row"><span class="sw ${svc.key}"></span><span><span class="full">${svc.name.replace("Household essentials", "Homes")}</span><span class="short">${SHORT_SVC[svc.key]}</span><small>needs ${svc.energy_kwh} kWh</small></span></span>${cells}`;
   }).join("");
-  $$("#sample-list .srow").forEach((row) => row.addEventListener("click", () => pickSample(row.dataset.bits)));
-}
-
-async function pickSample(bits) {
-  $$("#sample-list .srow").forEach((r) => r.classList.toggle("sel", r.dataset.bits === bits));
-  try {
-    state.picked = await api.evaluate(bits, state.battery, state.penalty);
-    $$("#source-seg button").forEach((b) => { if (b.dataset.value === "sample") b.disabled = false; });
-    setSource("sample");
-    setLabBits(bits, { scroll: false });
-  } catch (e) { toast(e.message, "bad"); }
-}
-
-/* ---------------------------------------------------------------------------
-   Rule lab
---------------------------------------------------------------------------- */
-
-function buildSwitches() {
-  const vars = state.scenario.variables;
-  const color = { m: "var(--milk)", i: "var(--irr)", w: "var(--water)", h: "var(--home)" };
-  const sw = (v, k) => `
-    <button class="qswitch" data-k="${k}" aria-pressed="${state.labBits[k] === "1"}" style="--c:${v.kind === "battery" ? "var(--battery)" : color[v.service]}">
-      <span class="qs-top"><span class="qs-var">${v.var}</span><span class="toggle"></span></span>
-      <span class="qs-name">${v.kind === "battery" ? `Battery ${state.scenario.slots[v.slot].name.toLowerCase()}` : `${v.short} · ${state.scenario.slots[v.slot].name.toLowerCase()}`}</span>
-      <span class="qs-meta">${v.kind === "battery" ? "adds 1 block, costs 0.25" : `${v.energy} blocks · worth ${v.benefit}`}</span>
-    </button>`;
-  $("#switches").innerHTML = `<span class="sw-group-title">Seven service choices</span>`
-    + vars.slice(0, 7).map((v, k) => sw(v, k)).join("")
-    + `<span class="sw-group-title">Four battery choices</span>`
-    + vars.slice(7).map((v, k) => sw(v, k + 7)).join("");
-  $$("#switches .qswitch").forEach((b) => b.addEventListener("click", () => {
+  const battery = `<span class="mx-row"><span class="sw d"></span><span>Battery<small>holds ${scn.battery_kwh} kWh</small></span></span>${scn.slots.map((s) => {
+    const k = vars.findIndex((v) => v.kind === "battery" && v.slot === s.index);
+    return `<button class="mx-cell" data-k="${k}" style="--c:var(--battery)" aria-label="Use the battery ${["in the morning", "at midday", "in the afternoon", "in the evening"][s.index]}" title="Adds 5 kWh to this slot">Use</button>`;
+  }).join("")}`;
+  $("#matrix").innerHTML = head + rows + battery;
+  $$("#matrix .mx-cell").forEach((b) => b.addEventListener("click", () => {
     const k = Number(b.dataset.k);
     const arr = state.labBits.split("");
     arr[k] = arr[k] === "1" ? "0" : "1";
-    setLabBits(arr.join(""), { scroll: false });
+    setLabBits(arr.join(""));
   }));
+  syncMatrix();
 }
 
-function setLabBits(bits, { scroll = false } = {}) {
+function syncMatrix() {
+  $$("#matrix .mx-cell").forEach((b) => b.setAttribute("aria-pressed", String(state.labBits[Number(b.dataset.k)] === "1")));
+}
+
+function setLabBits(bits) {
   state.labBits = bits;
-  $$("#switches .qswitch").forEach((b) => b.setAttribute("aria-pressed", String(bits[Number(b.dataset.k)] === "1")));
+  syncMatrix();
   evaluateLab();
-  if (scroll) $("#lab").scrollIntoView({ behavior: "smooth" });
 }
 
 let labToken = 0;
 async function evaluateLab() {
-  if (!state.fines) return;
   const my = ++labToken;
   let v;
-  try { v = await api.evaluate(state.labBits, state.battery, state.penalty); }
+  try { v = await api.evaluate(state.labBits, state.battery, PENALTY); }
   catch (e) { toast(e.message, "bad"); return; }
   if (my !== labToken) return;
-  const fired = new Set(v.fines_fired);
-  const best = v.best_objective;
-  const head = v.is_exact_best
-    ? `<span class="tag sun">This is the exact best</span>`
+
+  // Mark the cells sitting in a slot that asks for more energy than it has.
+  const over = new Set(v.slots.filter((s) => s.over).map((s) => s.index));
+  $$("#matrix .mx-cell").forEach((b) => {
+    const variable = state.scenario.variables[Number(b.dataset.k)];
+    b.classList.toggle("clash", b.getAttribute("aria-pressed") === "true" && over.has(variable.slot));
+  });
+
+  const empty = !state.labBits.includes("1");
+  const tag = empty ? `<span class="tag">Empty day</span>` : v.is_exact_best
+    ? `<span class="tag sun">The best possible day</span>`
     : v.feasible ? `<span class="tag good">Keeps every rule</span>` : `<span class="tag bad">Breaks ${v.violations.length} rule${v.violations.length > 1 ? "s" : ""}</span>`;
-  const msg = v.is_exact_best
-    ? "Nothing scores higher. The circuit is rewarded most for exactly this day."
-    : v.feasible
-      ? `Valid, but ${(best - v.objective).toFixed(2)} below the best objective of ${best}.`
-      : "The quantum cost adds the penalty for every fine below, so the optimiser tunes the circuit away from days like this.";
-  const list = v.violations.length
-    ? v.violations.map((x) => `<li>${escapeHtml(x)}</li>`).join("")
-    : `<li class="ok">Every rule holds. ${v.unserved.length ? `${escapeHtml(v.unserved.join(", "))} ${v.unserved.length > 1 ? "wait" : "waits"}.` : "Every service runs."}</li>`;
+  const lines = v.violations.length
+    ? v.violations.map((x, k) => `<li style="--k:${k}">${escapeHtml(x)}</li>`)
+    : [`<li class="ok">${empty ? "Nothing is switched on yet. Tap a slot above." : v.unserved.length ? `${escapeHtml(v.unserved.join(" and "))} ${v.unserved.length > 1 ? "wait" : "waits"}.` : "Every service runs."}</li>`];
+  if (v.feasible && !v.is_exact_best && !empty) lines.push(`<li class="ok" style="--k:1">The best day scores ${state.exact.benefit}.</li>`);
+
+  const prev = Number($("#vd-num")?.textContent) || 0;
   $("#verdict").innerHTML = `
-    <div class="vd-top"><b>Your day</b>${head}</div>
-    <p class="muted small" style="margin:0">${msg}</p>
-    <div class="vd-nums">
-      <div><span>Benefit</span><b class="num">${v.benefit}</b></div>
-      <div><span>Objective</span><b class="num">${v.objective}</b></div>
-      <div><span>Quantum cost</span><b class="num">${v.quantum_cost}</b></div>
-    </div>
-    <ul class="vd-list">${list}</ul>
-    <div class="vd-formula">cost = −${v.benefit} + 0.25 × ${v.battery_used} + ${v.penalty} × ${fired.size} fine${fired.size === 1 ? "" : "s"} = ${v.quantum_cost}</div>
-    <div class="mini-plan"><div class="slots" id="lab-slots"></div></div>`;
-  renderSlots($("#lab-slots"), v, { compact: true });
-  $("#lf-note").textContent = fired.size ? `${fired.size} fine${fired.size > 1 ? "s" : ""} fired · each adds ${v.penalty} to the cost` : `No fines fired · each would add ${v.penalty} to the cost`;
-  $("#fine-grid").innerHTML = state.fines.fines.map((f) => `
-    <div class="fchip${fired.has(f.id) ? " fired" : ""}">
-      <span class="fc-code"><span>${escapeHtml(f.code)}</span>${f.order >= 3 ? "<span>3 way</span>" : ""}</span>
-      <span class="fc-plain">${escapeHtml(f.plain)}</span>
-    </div>`).join("");
+    <div class="vd-score"><b class="num" id="vd-num" data-from="${prev}">${prev}</b><span>benefit</span></div>
+    <div class="vd-body">${tag}<ul class="vd-list">${lines.join("")}</ul></div>`;
+  countTo($("#vd-num"), v.benefit, { decimals: 0, duration: 450 });
 }
 
 $("#lab-best").addEventListener("click", () => setLabBits(state.exact.view.bits));
 $("#lab-clear").addEventListener("click", () => setLabBits("00000000000"));
-$("#lab-random").addEventListener("click", () => setLabBits(Array.from({ length: 11 }, () => (Math.random() < 0.35 ? "1" : "0")).join("")));
 
 /* ---------------------------------------------------------------------------
-   Evidence (recorded full run)
+   Keys and boot
 --------------------------------------------------------------------------- */
-
-async function evidence() {
-  let ev;
-  try { ev = await api.evidence(); } catch { $("#evidence .ev-grid").innerHTML = `<p class="muted">Run python run_all.py to record the full study.</p>`; return; }
-  const rnd = ev.random_guess;
-  groupedBars($("#ev-depth"), {
-    groups: ev.depth_study.map((r) => `${r.reps} layer${r.reps > 1 ? "s" : ""}`),
-    series: [{ name: "Suhai valid share", color: "var(--green)", values: ev.depth_study.map((r) => r.valid_share) }],
-    reference: { value: rnd.valid_share, label: `Random ${fmt.pct(rnd.valid_share)}` },
-    height: 200, max: 1,
-  });
-  const pens = Object.keys(ev.penalty_sensitivity).map(Number).sort((a, b) => a - b);
-  const at3 = (p) => ev.penalty_sensitivity[String(p)].find((r) => r.reps === 3) || ev.penalty_sensitivity[String(p)].slice(-1)[0];
-  groupedBars($("#ev-penalty"), {
-    groups: pens.map((p) => `Penalty ${p}`),
-    series: [
-      { name: "Valid share", color: "var(--green)", values: pens.map((p) => at3(p).valid_share) },
-      { name: "Exact best share", color: "var(--sun)", values: pens.map((p) => at3(p).optimum_share), note: "Bigger fines push the circuit toward doing nothing, which is valid but not best" },
-    ],
-    height: 200, max: 1,
-  });
-  dotStrip($("#ev-fcfs"), { rows: state.fcfs?.orders || [], best: state.exact?.benefit || 25, height: 200 });
-}
-
-/* ---------------------------------------------------------------------------
-   Rail, shortcuts, help
---------------------------------------------------------------------------- */
-
-(() => {
-  const links = $$(".top-links a");
-  const spy = new IntersectionObserver((entries) => {
-    entries.forEach((e) => { if (e.isIntersecting) links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${e.target.id}`)); });
-  }, { rootMargin: "-40% 0px -55% 0px" });
-  ["run", "samples", "lab", "evidence"].forEach((id) => spy.observe(document.getElementById(id)));
-})();
-
-
-$("#run-btn").addEventListener("click", startRun);
-$("#run-top").addEventListener("click", startRun);
-$("#cancel-btn").addEventListener("click", cancelRun);
 
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === "r") { e.preventDefault(); startRun(); }
-  else if (k === "escape") cancelRun();
+  else if (k === "escape") stopRun();
   else if (["1", "2", "3", "4"].includes(k)) setSlot(Number(k) - 1);
-  else if (k === "b") { const next = state.battery === 1 ? 2 : 1; batterySeg.set(next); setBattery(next); }
-  else if (k === "e" && !state.running) { state.encoding = state.encoding === "compact" ? "slack" : "compact"; encSeg.set(state.encoding); guardStandard(); estimate(); }
 });
-
-/* ---------------------------------------------------------------------------
-   Boot
---------------------------------------------------------------------------- */
 
 let touched = false;
 ["pointerdown", "keydown", "wheel"].forEach((ev) => window.addEventListener(ev, () => { touched = true; }, { once: true, passive: true }));
@@ -643,21 +497,12 @@ let touched = false;
 (async () => {
   const ready = await checkEngine();
   estimate();
-  if (!state.msPerEval) setTimeout(async () => { await checkEngine(); estimate(); }, 4000);
-  try {
-    await loadBase();
-  } catch (e) {
-    toast("Could not load the scenario from the server.", "bad");
-    console.error(e);
-    return;
-  }
-  initKpis();
-  evidence();
-  refreshMotion(document);
-  if (!ready) { $("#run-btn").disabled = true; $("#run-top").disabled = true; }
-  // Stage helper: /app?autorun starts a run as soon as the page is ready.
+  if (!state.msPerEval && !state.recorded) setTimeout(async () => { await checkEngine(); estimate(); }, 4000);
+  try { await loadBase(); }
+  catch (e) { toast("Could not load the scenario from the server.", "bad"); console.error(e); return; }
+  try { evidence = await api.evidence(); renderVersus(); } catch { /* the panel still shows the classical rows */ }
+  if (!ready) $("#run-btn").disabled = true;
   if (ready && new URLSearchParams(location.search).has("autorun")) { touched = true; setTimeout(startRun, 400); return; }
-  // Gentle tour of the day while the page settles.
-  [0, 1, 2, 3, 1].forEach((t, i) => setTimeout(() => { if (!state.running && !touched) setSlot(t); }, 600 + i * 1500));
+  // A slow walk through the day while the page settles.
+  [0, 1, 2, 3, 1].forEach((t, i) => setTimeout(() => { if (!state.running && !touched) setSlot(t); }, 2200 + i * 1800));
 })();
-

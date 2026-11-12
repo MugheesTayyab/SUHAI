@@ -4,11 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Suhai · Control room</title>
-  <meta name="description" content="Run QAOA live on the Suhai village scheduling problem and check every sample against the rules.">
+  <meta name="description" content="Run QAOA live on the Suhai village scheduling problem and check every answer against the rules.">
   <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
+  <script>
+    (function () {
+      var d = document.documentElement, same = false, q = location.search;
+      try { same = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) {}
+      var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+      var reload = nav && nav.type === "reload";
+      var calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      d.classList.add("js");
+      // Hold the opening letters until the brand font is in, so the word never swaps shape mid air.
+      var ready = function () { d.classList.add("fonts"); };
+      if (document.fonts && document.fonts.load) { document.fonts.load('600 100px "Geist"').then(ready, ready); setTimeout(ready, 700); } else ready();
+      if (!calm && !/autorun|shot/.test(q) && (!same || reload)) d.classList.add("intro-on"); else d.classList.add("go");
+      setTimeout(function () { d.classList.add("go"); d.classList.remove("intro-on"); }, 4500);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/base.css">
   <link rel="stylesheet" href="/assets/css/charts.css">
   <link rel="stylesheet" href="/assets/css/scene.css">
@@ -16,134 +31,115 @@
 </head>
 <body>
 
+<div class="intro" id="intro" aria-hidden="true"><div class="intro-bg"></div><span class="intro-word"><span class="l" style="--i:0">S</span><span class="l" style="--i:1">u</span><span class="l" style="--i:2">h</span><span class="l" style="--i:3">a</span><span class="l" style="--i:4">i</span><span class="brand-dot"></span></span></div>
+
 <header class="top">
-  <a class="brand" href="/">Suhai <span class="muted">Control room</span></a>
-  <nav class="top-links" aria-label="Sections">
-    <a href="#run">Run</a><a href="#samples">Samples</a><a href="#lab">Rule lab</a><a href="#evidence">Evidence</a>
-  </nav>
-  <span class="engine" id="engine"><span class="dot-live wait"></span><span id="engine-text">Connecting to Qiskit</span></span>
-  <button class="btn" id="run-top">Run QAOA <span class="arrow" aria-hidden="true">→</span></button>
+  <a class="brand" href="/" aria-label="Suhai home">Suhai<span class="brand-dot"></span></a>
+  <span class="top-sub">Control room</span>
+  <span class="engine" id="engine" title="The Python server that runs Qiskit"><span class="dot-live wait"></span><span id="engine-text">Connecting</span></span>
+  <a class="top-link" href="/">The story</a>
 </header>
 
 <main class="board">
-  <section class="hero-panel" id="overview">
-    <div class="hp-scene" id="hp-scene"></div>
-    <div class="hp-copy">
-      <h1>Power what matters.<br>When it matters.</h1>
-      <p id="hp-sub">40 kWh of sun and 5 kWh of battery for four services.</p>
-    </div>
-    <div class="hp-scrub">
-      <div class="seg" id="slot-seg" role="group" aria-label="Time of day">
-        <button data-value="0" aria-pressed="false">Morning</button>
-        <button data-value="1" aria-pressed="true">Midday</button>
-        <button data-value="2" aria-pressed="false">Afternoon</button>
-        <button data-value="3" aria-pressed="false">Evening</button>
-      </div>
-      <p class="hp-caption" id="hp-caption" aria-live="polite">Irrigation running</p>
-    </div>
-    <div class="hp-stats">
-      <div><span class="num" id="hp-benefit">25</span><span>benefit, <em id="hp-benefit-src">exact best</em></span></div>
-      <div><span class="num" id="hp-gap">0</span><span id="hp-gap-l">gap to exact best</span></div>
-    </div>
-  </section>
 
-  <section class="metrics" aria-label="Key numbers">
-    <div class="kpi"><span class="k-l">Samples that keep every rule <span class="tag" data-src>Recorded</span></span><span class="k-v num" id="k-valid">24.5%</span><span class="k-s" id="k-valid-s">Random guessing gets 2.5%</span></div>
-    <div class="kpi"><span class="k-l">Samples that are the best day <span class="tag" data-src>Recorded</span></span><span class="k-v num"><span id="k-hits">45</span><small> / <span id="k-shots">4,096</span></small></span><span class="k-s" id="k-hits-s">1.10% of samples, one layer</span></div>
-    <div class="kpi"><span class="k-l">Qubits</span><span class="k-v num" id="k-qubits">11</span><span class="k-s"><span id="k-qubits-l">and zero helper qubits</span>. <span id="k-qubits-s">The standard method needs <b id="k-qubits-std">20</b></span></span></div>
-    <div class="kpi"><span class="k-l">Two qubit gates per layer</span><span class="k-v num" id="k-gates">46</span><span class="k-s" id="k-gates-s">Standard method <b id="k-gates-std">106</b></span></div>
-  </section>
-
-  <div class="grid">
-    <section class="panel run-panel" id="run">
-      <header class="ph">
-        <h2>Quantum run</h2>
-        <span class="ph-right"><span class="tag" id="run-tag">Idle</span><span class="mono timer" id="run-timer">0.0 s</span></span>
-      </header>
+  <section class="panel qpanel enter" id="run" style="--d:1">
+    <span class="kicker"><span class="ket">|ψ⟩</span>Quantum register</span>
+    <h1 id="q-title">Eleven qubits decide who gets the sun.</h1>
+    <p class="q-sub" id="q-sub">Each qubit is one yes or no choice. Until it is measured, the register holds all 2,048 possible days at once.</p>
+    <div id="register" aria-label="The 11 qubits, grouped by time of day"></div>
+    <div class="q-actions">
       <div class="controls">
-        <div class="ctl"><span>Encoding</span><div class="seg" id="enc-seg"><button data-value="compact" aria-pressed="true">Suhai, 11</button><button data-value="slack" aria-pressed="false">Standard, 20</button></div></div>
-        <div class="ctl"><span>Layers</span><div class="seg" id="layers-seg"><button data-value="1" aria-pressed="true">1</button><button data-value="2" aria-pressed="false">2</button><button data-value="3" aria-pressed="false">3</button></div></div>
-        <div class="ctl"><span>Fine</span><div class="seg" id="penalty-seg"><button data-value="12" aria-pressed="true">12</button><button data-value="20" aria-pressed="false">20</button><button data-value="40" aria-pressed="false">40</button></div></div>
-        <div class="ctl"><span>Battery</span><div class="seg" id="battery-seg"><button data-value="1" aria-pressed="true">5 kWh</button><button data-value="2" aria-pressed="false">10 kWh</button></div></div>
+        <div class="ctl"><span class="ctl-l">Method</span>
+          <div class="seg" id="enc-seg" role="group" aria-label="Encoding"><button data-value="compact" aria-pressed="true">Suhai, 11 qubits</button><button data-value="slack" aria-pressed="false" title="Adds 9 helper qubits that only count spare energy">Standard, 20 qubits</button></div></div>
+        <div class="ctl"><span class="ctl-l">Circuit layers</span>
+          <div class="seg" id="layers-seg" role="group" aria-label="Circuit layers"><button data-value="1" aria-pressed="true">1</button><button data-value="2" aria-pressed="false">2</button><button data-value="3" aria-pressed="false">3</button></div></div>
+        <div class="ctl"><span class="ctl-l">Battery</span>
+          <div class="seg" id="battery-seg" role="group" aria-label="Battery size"><button data-value="1" aria-pressed="true">5 kWh</button><button data-value="2" aria-pressed="false">10 kWh</button></div></div>
       </div>
-      <div class="run-row">
-        <button class="btn" id="run-btn"><span class="run-label">Run QAOA</span><span class="arrow" aria-hidden="true">→</span></button>
-        <button class="btn light sm" id="cancel-btn" hidden>Stop</button>
-        <span class="muted small" id="estimate">Measuring this machine</span>
+      <button class="run-btn" id="run-btn">
+        <span class="rb-fill" id="rb-fill"></span>
+        <span class="rb-label" id="rb-label">Measure the qubits</span>
+        <span class="rb-hint" id="rb-hint">about 4 s</span>
+      </button>
+      <p class="status" id="status">Qiskit tunes the circuit, measures it 4,096 times and keeps the best day that breaks no rule.</p>
+    </div>
+    <div class="trace-shell" id="trace-shell">
+      <div class="trace-inner">
+        <div class="trace-head"><b>The circuit learning</b><span>each line is one try of the angles</span></div>
+        <div class="trace" id="trace"></div>
       </div>
-      <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
-      <p class="status small" id="run-status-text">QAOA on the Aer statevector simulator. Press Run or the R key.</p>
-      <div class="trace-head small"><b>Circuit cost</b><span class="muted">lower is better, scaled</span><span class="legend"><span><i class="lg line" style="border-top:1.5px solid rgba(17,19,17,.3)"></i>Each try</span><span><i class="lg" style="background:var(--green)"></i>Best so far</span></span></div>
-      <div class="trace" id="trace"></div>
-      <div class="layer-chips" id="layer-chips"></div>
-    </section>
+    </div>
+  </section>
 
-    <section class="panel plan-panel" id="plan">
-      <header class="ph"><h2>The plan</h2></header>
-      <p class="muted small" id="plan-note">The exact best, found by checking all 2,048 days.</p>
-      <div class="seg wide" id="source-seg">
-        <button data-value="qaoa" aria-pressed="false" disabled>QAOA best</button>
-        <button data-value="exact" aria-pressed="true">Exact best</button>
-        <button data-value="fcfs" aria-pressed="false">First come</button>
-        <button data-value="sample" aria-pressed="false" disabled>Picked</button>
+  <section class="panel day enter" id="day" style="--d:2">
+    <header class="ph">
+      <div>
+        <span class="kicker"><span class="ket">|1⟩</span>The plan</span>
+        <h2>The village day</h2>
+        <p class="sub" id="day-sub">40 kWh of sun and a 5 kWh battery for four services</p>
       </div>
-      <div class="slots" id="plan-slots"></div>
-      <dl class="plan-foot">
-        <div><dt>Benefit</dt><dd class="num" id="pf-benefit">25</dd></div>
-        <div><dt>Battery used</dt><dd class="num" id="pf-battery">1</dd></div>
-        <div class="grow"><dt>Waiting</dt><dd id="pf-unserved">Household essentials</dd></div>
-        <span class="tag good" id="pf-verdict">Keeps every rule</span>
-      </dl>
-      <p class="muted small">The clinic vaccine fridge is powered before planning and never competes.</p>
-    </section>
-
-    <section class="panel samples-panel" id="samples">
-      <header class="ph"><h2>What the circuit returned</h2><span class="tag" id="samples-tag">No run yet</span></header>
-      <p class="muted small" id="samples-note">The most frequent schedules from the last run. Click one to inspect it.</p>
-      <div class="hist-head small" id="hist-head"></div>
-      <div class="hist" id="hist"></div>
-      <ol class="sample-list" id="sample-list"><li class="empty-row">Run QAOA and the top schedules appear here, each checked against the rules.</li></ol>
-    </section>
-
-    <section class="panel land-panel">
-      <header class="ph"><h2>Where the samples landed</h2></header>
-      <p class="muted small" id="land-note">All 2,048 possible days. Green squares keep every rule. The gold one is the best.</p>
-      <div class="land-box"><canvas id="land"></canvas></div>
-      <div class="legend" id="land-legend"></div>
-    </section>
-
-    <section class="panel lab-panel" id="lab">
-      <header class="ph">
-        <div><h2>Rule lab</h2><p class="muted small">Build a day by hand. The server scores it the same way the quantum cost does.</p></div>
-        <span class="ph-right"><button class="btn light sm" id="lab-best">Load the best</button><button class="btn light sm" id="lab-random">Random day</button><button class="btn light sm" id="lab-clear">Clear</button></span>
-      </header>
-      <div class="lab">
-        <div class="switches" id="switches"></div>
-        <div class="verdict" id="verdict"></div>
+      <div class="seg" id="source-seg" role="group" aria-label="Which plan to show">
+        <button data-value="qaoa" aria-pressed="false" disabled title="Appears after the qubits are measured">Quantum</button>
+        <button data-value="exact" aria-pressed="true" title="Found by checking all 2,048 days">Exact best</button>
+        <button data-value="fcfs" aria-pressed="false" title="Serve whoever asks first">First come</button>
       </div>
-      <div class="lab-fines">
-        <div class="lf-head small"><b>The 16 fines</b><span class="muted" id="lf-note"></span></div>
-        <div class="fine-grid" id="fine-grid"></div>
-      </div>
-    </section>
+    </header>
+    <div class="day-scene" id="day-scene">
+      <p class="scene-cap" id="scene-cap" aria-live="polite"></p>
+    </div>
+    <div class="slots" id="plan-slots" aria-label="Energy in each part of the day. Click a column to see that time."></div>
+    <footer class="day-foot">
+      <span class="df-num num" id="df-benefit">25</span>
+      <span class="df-text" id="df-text">benefit</span>
+      <span class="tag good" id="df-verdict">Keeps every rule</span>
+    </footer>
+  </section>
 
-    <section class="panel ev-panel" id="evidence">
-      <header class="ph">
-        <div><h2>Evidence from the recorded full run</h2><p class="muted small">Reproduced with <code class="mono">python run_all.py</code>. These are the numbers in the report.</p></div>
-      </header>
-      <div class="ev-grid">
-        <figure><figcaption class="small"><b>Valid share by depth</b><span class="muted">Suhai encoding</span></figcaption><div id="ev-depth"></div></figure>
-        <figure><figcaption class="small"><b>Bigger fines are a trade off</b><span class="muted">Three layers. More valid days, fewer best days.</span></figcaption><div id="ev-penalty"></div></figure>
-        <figure><figcaption class="small"><b>First come first served</b><span class="muted">All 24 arrival orders</span></figcaption><div id="ev-fcfs"></div></figure>
-      </div>
-    </section>
-  </div>
+  <section class="panel versus enter" id="versus" style="--d:3">
+    <header>
+      <span class="kicker"><span class="ket">|2⟩</span>Quantum vs classical</span>
+      <div class="vs-hero"><span class="vs-big num" id="vs-ratio">3.9×</span><span class="vs-what" id="vs-what">more valid answers than the standard quantum method, with 9 fewer qubits</span></div>
+    </header>
+    <div class="vs-head"><span></span><span>Keeps every rule</span><span>Best day</span></div>
+    <ol class="vs-list" id="vs-list"></ol>
+    <p class="vs-note" id="vs-note">On a village this small a classical computer is faster, and we say so. Suhai's gain is fewer qubits, which is what today's small, noisy quantum computers need.</p>
+  </section>
 
-  <footer class="board-foot muted small">
-    Suhai · Power what matters. When it matters. · Synthetic data · No quantum speedup claimed. Checking all 2,048 days takes <span id="foot-ms">under a second</span>.
-    Keys: R run, Esc stop, 1 to 4 time of day, B battery, E encoding.
-  </footer>
+  <section class="panel space enter" id="space" style="--d:3">
+    <header class="ph">
+      <div>
+        <span class="kicker"><span class="ket">|3⟩</span>Measurements</span>
+        <h2>Every answer, checked</h2>
+        <p class="sub" id="space-sub">All 2,048 possible days. Green ones keep every rule and gold is the best.</p>
+      </div>
+    </header>
+    <div class="land-box"><canvas id="land" aria-label="All 2,048 possible days"></canvas></div>
+    <div class="legend" id="land-legend"></div>
+  </section>
+
+  <section class="panel lab enter" id="lab" style="--d:4">
+    <header class="ph">
+      <div>
+        <span class="kicker"><span class="ket">|4⟩</span>Your turn</span>
+        <h2>Try your own day</h2>
+        <p class="sub">Tap a slot to switch it on. Your day is checked with the same rules the circuit learns.</p>
+      </div>
+      <div class="ph-actions">
+        <button class="btn light sm" id="lab-best">Show the best</button>
+        <button class="btn light sm" id="lab-clear">Clear</button>
+      </div>
+    </header>
+    <div class="matrix" id="matrix"></div>
+    <div class="verdict" id="verdict" aria-live="polite"></div>
+  </section>
+
 </main>
+
+<footer class="board-foot">
+  <span class="brand">Suhai<span class="brand-dot"></span></span>
+  <span>Power what matters. When it matters.</span>
+  <span class="muted">Synthetic data · simulated on Qiskit Aer · no speedup claimed</span>
+</footer>
 
 <script type="module" src="/assets/js/app.js"></script>
 </body>

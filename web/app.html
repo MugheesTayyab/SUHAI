@@ -75,8 +75,8 @@
     <header class="ph">
       <div>
         <span class="kicker"><span class="ket">|1⟩</span>The plan</span>
-        <h2>The village day</h2>
-        <p class="sub" id="day-sub">40 kWh of sun and a 5 kWh battery for four services</p>
+        <h2 id="day-title">The best possible day</h2>
+        <p class="sub" id="day-sub">Found by checking all 2,048 days</p>
       </div>
       <div class="seg" id="source-seg" role="group" aria-label="Which plan to show">
         <button data-value="qaoa" aria-pressed="false" disabled title="Appears after the qubits are measured">Quantum</button>
@@ -84,14 +84,12 @@
         <button data-value="fcfs" aria-pressed="false" title="Serve whoever asks first">First come</button>
       </div>
     </header>
-    <div class="day-scene" id="day-scene">
-      <p class="scene-cap" id="scene-cap" aria-live="polite"></p>
-    </div>
+    <div class="day-scene" id="day-scene"></div>
     <div class="slots" id="plan-slots" aria-label="Energy in each part of the day. Click a column to see that time."></div>
     <footer class="day-foot">
       <span class="df-num num" id="df-benefit">25</span>
       <span class="df-text" id="df-text">benefit</span>
-      <span class="tag good" id="df-verdict">Keeps every rule</span>
+      <span class="df-tags"><span class="tag good" id="df-verdict">Keeps every rule</span><span class="tag q" id="df-win" hidden></span></span>
     </footer>
   </section>
 

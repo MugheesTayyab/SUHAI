@@ -60,3 +60,12 @@
 
 /* Off screen, nothing animates */
 .ss-scene.is-paused *, .ss-scene.is-paused { animation-play-state: paused !important; }
+
+/* The dashboard crop cuts the field label off, and the columns already say it. */
+.mode-board #ss-l-i { display: none; }
+
+/* Smoothness. In the control room the scene stays still: the qubits carry the motion, and the
+   browser no longer repaints this large picture on every frame. Lit lines still show. */
+.mode-board .ss-flow, .mode-board .ss-frost, .mode-board .ss-drops, .mode-board .ss-spray, .mode-board .ss-clinic-pulse { animation: none !important; }
+.mode-board .ss-drops { opacity: 0; }
+.on-w.mode-board .ss-drops { opacity: 1; }

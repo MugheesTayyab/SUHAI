@@ -22,7 +22,7 @@ export const SERVICE = {
 export const SLOT_WORD = ["in the morning", "at midday", "in the afternoon", "in the evening"];
 
 // Columns of 5 kWh blocks for each slot: what runs, what is spare, where the battery helps.
-export function renderSlots(container, view, { compact = false } = {}) {
+export function renderSlots(container, view, { compact = false, minimal = false } = {}) {
   container.innerHTML = view.slots.map((s) => {
     const cells = [];
     let k = 0;
@@ -35,12 +35,21 @@ export function renderSlots(container, view, { compact = false } = {}) {
       }
     });
     const spare = Math.max(0, s.capacity - s.used);
-    for (let b = 0; b < spare; b++) cells.push(`<div class="cell spare" style="--k:${k++}">${b === 0 ? "spare" : ""}</div>`);
+    for (let b = 0; b < spare; b++) cells.push(`<div class="cell spare" style="--k:${k++}">${b === 0 && !minimal ? "spare" : ""}</div>`);
     const rows = Math.max(5, s.used, s.capacity);
     const cap = s.over
       ? `<span class="sc-cap over-text">Needs ${s.used}, has ${s.capacity}</span>`
       : `<span class="sc-cap">${s.used} of ${s.capacity} block${s.capacity === 1 ? "" : "s"} used</span>`;
     const bat = s.battery ? `<span class="sc-bat">${ICON.d.replace('width="18" height="18"', 'width="11" height="11"')} battery block</span>` : `<span class="sc-bat off">solar only</span>`;
+    if (minimal) {
+      // Energy on offer as pips: amber for each block of sun, dark for the battery block.
+      const pips = `${"<i class=\"pip sun\"></i>".repeat(s.solar)}${s.battery ? "<i class=\"pip bat\"></i>" : ""}`;
+      return `<div class="slotcol minimal${s.over ? " over" : ""}" title="${s.used} of ${s.capacity} blocks used${s.battery ? ", one from the battery" : ""}">
+        <span class="sc-name">${s.name}</span>
+        <span class="sc-pips">${pips || '<span class="sc-none">no sun</span>'}</span>
+        <div class="stack${s.over ? " is-over" : ""}" style="--rows:${rows}">${cells.join("")}</div>
+      </div>`;
+    }
     return `<div class="slotcol">
       <span class="sc-name">${s.name}</span>
       ${cap}${bat}

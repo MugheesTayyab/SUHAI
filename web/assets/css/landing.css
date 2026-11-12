@@ -59,6 +59,30 @@ h3 { font-size: 22px; letter-spacing: -0.03em; }
 .fm-rules ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; color: var(--ink-2); }
 .foot-note { max-width: 62ch; margin: 22px auto 0; text-align: center; font-size: 13.5px; color: var(--ink-3); }
 
+/* ---------- Why it matters ---------- */
+
+.src { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
+.head p b { color: var(--ink); }
+.needs { max-width: 980px; margin: 0 auto; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
+.needs li { display: flex; flex-direction: column; gap: 6px; padding-top: 18px; border-top: 1px solid var(--line-2); font-size: 14.5px; color: var(--ink-2); }
+.needs b { color: var(--ink); font-size: 17px; letter-spacing: -0.02em; }
+.nd { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--c); margin-bottom: 4px; }
+.clinic-line { max-width: 980px; margin: 28px auto 0; display: flex; align-items: center; gap: 10px; font-size: 14.5px; color: var(--ink-2); }
+.clinic-line .nd { margin: 0; flex: none; }
+.change { max-width: 980px; margin: 72px auto 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.ch-col { padding: 26px 28px; border-radius: 22px; }
+.ch-col.before { border: 1px dashed var(--line-2); color: var(--ink-2); }
+.ch-col.after { background: var(--brand); color: #fff; box-shadow: 0 24px 50px -24px var(--brand-glow); }
+.ch-col.after .brand-dot { width: 9px; height: 9px; background: #fff; margin: 0 8px 0 0; align-self: center; }
+.ch-k { display: inline-flex; align-items: baseline; font-size: 13px; font-weight: 600; margin-bottom: 10px; opacity: 0.85; }
+.ch-col p { font-size: 18px; line-height: 1.45; letter-spacing: -0.01em; }
+.ch-col b { font-size: 30px; letter-spacing: -0.04em; }
+.ch-arrow { align-self: center; font-size: 26px; color: var(--brand); }
+.wins { max-width: 980px; margin: 64px auto 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.wins div { display: flex; flex-direction: column; gap: 8px; }
+.w-big { font-size: clamp(52px, 6vw, 80px); font-weight: 600; letter-spacing: -0.06em; line-height: 0.95; color: var(--brand); }
+.wins span:not(.w-big) { font-size: 15px; color: var(--ink-2); max-width: 30ch; }
+
 /* ---------- The day ---------- */
 
 .table-card { max-width: 860px; margin: 0 auto; padding: 8px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow-x: auto; }
@@ -191,6 +215,10 @@ figcaption { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12p
   .nav { justify-content: space-between; }
   .charts { grid-template-columns: 1fr; gap: 40px; }
   .figures { grid-template-columns: 1fr; gap: 40px; }
+  .needs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .change { grid-template-columns: 1fr; }
+  .ch-arrow { transform: rotate(90deg); justify-self: center; }
+  .wins { grid-template-columns: 1fr; gap: 28px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .band { padding: 88px 0; }
 }

@@ -98,7 +98,7 @@
 
 .day-scene {
   position: relative; overflow: hidden;
-  height: 230px; border-radius: 14px;
+  height: 170px; border-radius: 14px;
   background: #dfe8d4;
 }
 .day-scene .ss-scene { position: absolute; inset: 0; }
@@ -121,11 +121,19 @@
 }
 .day .slotcol:hover { background: rgba(17, 19, 17, 0.025); }
 .day .slotcol.now { background: var(--surface-2); border-color: rgba(91, 60, 245, 0.25); }
-.day .stack { height: 150px; }
+.day .stack { height: 128px; }
+.slotcol.minimal { gap: 8px; }
+.sc-pips { display: flex; gap: 3px; height: 10px; align-items: center; }
+.pip { width: 10px; height: 10px; border-radius: 3px; }
+.pip.sun { background: var(--sun); }
+.pip.bat { background: var(--battery); }
+.sc-none { font-size: 11.5px; color: var(--ink-3); }
+.slotcol.minimal .cell.spare { border-style: dashed; }
+.df-tags { display: flex; gap: 6px; flex-wrap: wrap; align-self: center; }
 
 .day-foot { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
 .df-num { font-size: 34px; font-weight: 600; letter-spacing: -0.045em; line-height: 1; }
-.df-text { font-size: 14px; color: var(--ink-2); flex: 1; min-width: 160px; }
+.df-text { font-size: 14px; color: var(--ink-3); flex: 1; min-width: 140px; }
 .day-foot .tag { align-self: center; }
 
 /* ---------- Quantum planner ---------- */
@@ -250,3 +258,8 @@
   .r-v { font-size: 24px; }
   .board-foot .muted { margin-left: 0; }
 }
+
+/* Each panel lays out and paints on its own, so live text updates never ripple through the page. */
+.panel { contain: layout paint; }
+.day-scene { contain: strict; }
+.trace, .land-box { contain: layout paint; }

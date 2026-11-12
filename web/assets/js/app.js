@@ -89,15 +89,12 @@ function setSlot(t, { animate = true } = {}) {
   const view = currentView();
   scene[animate ? "animateTo" : "setPhase"](SLOT_PHASE[t], 1200);
   scene.setActive({ ...slotState(view, t, state.battery), labels: true });
-  const cap = $("#scene-cap");
-  cap.textContent = `${view.slots[t].name}. ${slotSentence(view.slots[t], view, state.battery)}`;
-  cap.style.animation = "none"; void cap.offsetWidth; cap.style.animation = "";
   $$("#plan-slots .slotcol").forEach((c, k) => c.classList.toggle("now", k === t));
 }
 
 function renderDay() {
   const view = currentView();
-  renderSlots($("#plan-slots"), view);
+  renderSlots($("#plan-slots"), view, { minimal: true });
   $$("#plan-slots .slotcol").forEach((c, k) => {
     c.classList.toggle("now", k === state.slot);
     c.addEventListener("click", () => setSlot(k));
@@ -106,17 +103,28 @@ function renderDay() {
   num.dataset.from = parseInt(num.textContent, 10) || 0;
   countTo(num, view.benefit, { duration: 600, decimals: 0 });
 
-  const waiting = view.unserved.length ? `${view.unserved.join(" and ").toLowerCase()} ${view.unserved.length > 1 ? "wait" : "waits"}` : "every service runs";
+  // The panel states the outcome in one line, then proves it with one number and one tag.
+  const best = state.exact.benefit;
+  const waiting = view.unserved.length ? `${view.unserved.map((n) => n.replace("Household essentials", "Homes")).join(" and ")} ${view.unserved.length > 1 ? "wait" : "waits"}` : "Every service runs";
   const r = state.result;
-  const where = {
-    exact: `benefit, the best of all ${fmt.int(state.exact.n_total)} days. ${cap(waiting)}.`,
-    qaoa: r?.best_valid ? `benefit, the best valid answer the circuit returned. ${r.best_valid.bits === state.exact.view.bits ? "It matches the exact best." : `${r.gap_to_exact} below the exact best.`}` : "",
-    fcfs: state.fcfsView?.order ? `benefit when whoever asks first is served first, in the unluckiest order. ${cap(waiting)}.` : "",
+  const same = r?.best_valid && r.best_valid.bits === state.exact.view.bits;
+  const copy = {
+    exact: ["The best possible day", `Found by checking all ${fmt.int(state.exact.n_total)} days`, null],
+    qaoa: [same ? "The qubits found the best day" : "The qubits' best day", "Measured from 11 qubits and checked against every rule",
+      same ? `Same as checking all ${fmt.int(state.exact.n_total)} days` : `${r?.gap_to_exact} below the best`],
+    fcfs: ["First come first served", "Serve whoever asks first, in the unluckiest order", null],
   }[state.source];
-  $("#df-text").textContent = where;
+  const title = $("#day-title");
+  if (title.textContent !== copy[0]) { title.textContent = copy[0]; title.classList.remove("title-swap"); void title.offsetWidth; title.classList.add("title-swap"); }
+  $("#day-sub").textContent = copy[1];
+  $("#df-text").textContent = `of ${best} possible · ${waiting}`;
   const verdict = $("#df-verdict");
-  verdict.className = `tag ${view.feasible ? "good" : "bad"}`;
-  verdict.textContent = view.feasible ? "Keeps every rule" : "Breaks a rule";
+  const short = view.feasible && view.benefit < best;
+  verdict.className = `tag ${!view.feasible ? "bad" : short ? "sun" : "good"}`;
+  verdict.textContent = !view.feasible ? "Breaks a rule" : short ? `${best - view.benefit} below the best` : "Keeps every rule";
+  const win = $("#df-win");
+  win.hidden = !copy[2];
+  if (copy[2]) win.textContent = copy[2];
 }
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -155,7 +163,6 @@ async function loadBase() {
   state.fcfsView = await api.evaluate(worst.bits, b, PENALTY);
   state.fcfsView.order = worst.order;
   const sun = scenario.slots.reduce((a, s) => a + s.solar_kwh, 0);
-  $("#day-sub").textContent = `${sun} kWh of sun and a ${scenario.battery_kwh} kWh battery for four services`;
   state.fcfs = fcfs;
   if (!register) register = createRegister($("#register"), scenario);
   renderDay();

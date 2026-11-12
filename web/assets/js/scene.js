@@ -66,7 +66,7 @@ function rawMarkup(mode) {
   const viewBox = mode === "board" ? "740 420 860 365" : "0 0 1600 900";
   const k = mode === "board" ? 0.72 : 1;
   return `
-<svg class="ss-scene" viewBox="${viewBox}" preserveAspectRatio="${mode === "board" ? "xMidYMax" : "xMidYMid"} slice" role="img"
+<svg class="ss-scene" viewBox="${viewBox}" preserveAspectRatio="xMidYMid slice" role="img"
      aria-label="A village with solar panels, a battery, a clinic, a milk chiller, a water purifier, homes and a field">
   <defs>
     <linearGradient id="ss-sky" x1="0" y1="0" x2="0" y2="1">

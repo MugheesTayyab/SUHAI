@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suhai · Power what matters. When it matters.</title>
+  <meta name="description" content="Suhai schedules a village's limited solar energy with QAOA on 11 qubits and checks every answer against the rules.">
+  <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/charts.css">
+  <link rel="stylesheet" href="/assets/css/landing.css">
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="/" aria-label="Suhai home">Suhai</a>
+  <nav class="links" aria-label="Sections">
+    <a href="#problem">Problem</a>
+    <a href="#method">Method</a>
+    <a href="#results">Results</a>
+    <a href="#limits">Limits</a>
+  </nav>
+  <a class="btn" href="/app">Open control room <span class="arrow" aria-hidden="true">→</span></a>
+</header>
+
+<main>
+  <section class="hero" id="top">
+    <span class="pill"><b>11 qubits</b> where the standard method needs 20</span>
+    <h1>Power what matters.<br>When it matters.</h1>
+    <p class="lede">Suhai plans a village's solar energy for one day, slot by slot. A quantum algorithm proposes the schedule and ordinary code checks every proposal against the energy limits.</p>
+    <a class="btn" href="/app">Open control room <span class="arrow" aria-hidden="true">→</span></a>
+    <div class="hero-art" id="hero-art"></div>
+    <p class="hero-note"><span class="dot-live"></span> Qiskit Fall Fest 2026 · Energy and Smart Infrastructure</p>
+  </section>
+
+  <section class="band" id="problem">
+    <div class="wrap split">
+      <div class="lead-col" data-reveal>
+        <span class="eyebrow">The problem</span>
+        <h2>A village with 40 kWh of sun and four services to run.</h2>
+        <p>Solar output peaks at midday and is gone after dark. The battery holds one 5 kWh block. Milk needs chilling, fields need water, households need clean water and light. Someone has to decide which service runs in which slot, and in this village some of them will have to wait.</p>
+        <p class="aside">The clinic's vaccine fridge is powered before planning starts and is never part of the trade.</p>
+      </div>
+      <div class="table-col" data-reveal>
+        <table class="day-table" id="day-table" aria-describedby="day-note"></table>
+        <p class="muted small" id="day-note">One block is 5 kWh. Numbers show the benefit score for running a service in that slot. All values are synthetic and chosen by the team.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band tinted" id="space">
+    <div class="wrap">
+      <div class="row-head" data-reveal>
+        <h2>2,048 possible days.<br><span class="muted">52 of them keep every rule.</span></h2>
+        <p>Eleven yes or no decisions describe a day. Each square below is one of those days. Hover a square and the server checks it against the rules. The gold square is the best day, worth 25.</p>
+      </div>
+      <canvas id="landscape" aria-label="All 2,048 possible schedules"></canvas>
+      <div class="grid-foot">
+        <div class="legend"><span><i class="lg ok"></i>Keeps every rule</span><span><i class="lg no"></i>Breaks a rule</span><span><i class="lg best"></i>Best day</span></div>
+        <p class="detail" id="space-detail">Hover any square.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="method">
+    <div class="wrap method">
+      <div class="method-copy" data-reveal>
+        <span class="eyebrow">The method</span>
+        <h2>Eleven qubits where the standard method needs twenty.</h2>
+        <p>The usual way to put an energy limit on qubits adds helper qubits that count the unused energy. This village would need nine of them. Suhai lists the 16 smallest combinations that break a rule and adds a fine for each one, so every qubit is a real decision.</p>
+        <ol class="steps">
+          <li><span><b>Describe the day</b> as 11 decisions, seven for services and four for the battery.</span></li>
+          <li><span><b>Fine every broken rule</b> 12 points, so the cheapest schedule is the best one.</span></li>
+          <li><span><b>Run QAOA in Qiskit.</b> COBYLA tunes the angles on the Aer simulator, then the circuit is measured 4,096 times.</span></li>
+          <li><span><b>Check every sample</b> against the original rules and keep the best valid one. The exact answer is never inserted.</span></li>
+        </ol>
+      </div>
+      <div class="encode" data-reveal>
+        <div class="encode-top">
+          <div class="seg" id="enc-toggle" role="group" aria-label="Encoding">
+            <button data-value="slack" aria-pressed="false">Standard</button>
+            <button data-value="compact" aria-pressed="true">Suhai</button>
+          </div>
+          <span class="muted small">Measured after compiling to cx, rz, sx and x</span>
+        </div>
+        <div class="qubits" id="qubits"></div>
+        <dl class="enc-stats">
+          <div><dt>Qubits</dt><dd class="num" id="es-q">11</dd><span class="bar"><i id="es-qb"></i></span></div>
+          <div><dt>Two qubit gates per layer</dt><dd class="num" id="es-g">46</dd><span class="bar"><i id="es-gb"></i></span></div>
+          <div><dt>Circuit depth per layer</dt><dd class="num" id="es-d">55</dd><span class="bar"><i id="es-db"></i></span></div>
+        </dl>
+      </div>
+    </div>
+    <div class="wrap fines-block" data-reveal>
+      <h3>The 16 fines</h3>
+      <p class="muted">Two of them involve three decisions at once, so the model is a QUBO plus two higher order terms. QAOA applies those as three qubit interactions.</p>
+      <ol class="fines" id="fines"></ol>
+    </div>
+  </section>
+
+  <section class="band tinted" id="results">
+    <div class="wrap">
+      <div class="row-head" data-reveal>
+        <h2>Same optimiser budget,<br><span class="muted">more than four times the valid samples.</span></h2>
+        <p>Both encodings got three starting points and 150 optimiser steps per layer. Figures come from the recorded full run, which one command reproduces.</p>
+      </div>
+      <div class="figures">
+        <div class="figure" data-reveal><span class="big num" data-count="24.5" data-suffix="%" data-decimals="1">0</span><p>of Suhai samples keep every rule at one layer. The standard encoding reached <b id="r-std">6.2%</b>.</p></div>
+        <div class="figure" data-reveal><span class="big num" data-count="69.8" data-suffix="%" data-decimals="1">0</span><p>valid at three layers. Random guessing gets <b id="r-rand">2.5%</b>.</p></div>
+        <div class="figure" data-reveal><span class="big num" data-count="0">0</span><p>gap between the best valid sample and the exact best, at every depth.</p></div>
+      </div>
+      <div class="charts">
+        <figure data-reveal>
+          <figcaption><b>Samples that keep every rule</b><span class="legend"><span><i class="lg" style="background:var(--green)"></i>Suhai, 11 qubits</span><span><i class="lg" style="background:var(--slate)"></i>Standard, 20 qubits</span></span></figcaption>
+          <div id="chart-fair" class="chart-box"></div>
+        </figure>
+        <figure data-reveal>
+          <figcaption><b>Samples that are exactly the best day</b><span class="legend"><span><i class="lg" style="background:var(--green)"></i>Suhai</span></span></figcaption>
+          <div id="chart-depth" class="chart-box"></div>
+        </figure>
+      </div>
+      <figure class="fcfs" data-reveal>
+        <figcaption><b>First come first served, all 24 arrival orders</b><span class="muted small">Serving whoever asks first scores between <b id="fc-min">9</b> and <b id="fc-max">25</b>. Only <b id="fc-best">5</b> orders reach the best day.</span></figcaption>
+        <div id="chart-fcfs" class="chart-box"></div>
+      </figure>
+      <div class="whatif" data-reveal>
+        <div>
+          <h3>What if the battery held 10 kWh?</h3>
+          <p class="muted">The server solves the day again. The best benefit rises from 25 to 28 and households get evening power.</p>
+          <div class="seg" id="battery-toggle" role="group" aria-label="Battery size">
+            <button data-value="1" aria-pressed="true">5 kWh</button>
+            <button data-value="2" aria-pressed="false">10 kWh</button>
+          </div>
+        </div>
+        <div class="wi">
+          <div class="wi-head"><span class="big num" id="wi-score">25</span><span class="tag sun" id="wi-tag">Households wait</span></div>
+          <div class="wi-slots" id="wi-slots"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="limits">
+    <div class="wrap split">
+      <div class="lead-col" data-reveal>
+        <span class="eyebrow">Limits</span>
+        <h2>What these results do not show.</h2>
+        <p>We list these because a judge, or a village operator, should know them before trusting the numbers.</p>
+      </div>
+      <dl class="limits" data-reveal>
+        <div><dt>No speedup</dt><dd>Checking all 2,048 schedules takes well under a second on a laptop. QAOA is slower here, and we claim no quantum advantage.</dd></div>
+        <div><dt>Synthetic data</dt><dd>Energy figures and benefit scores are the team's own judgment, written down so anyone can question them.</dd></div>
+        <div><dt>Ideal simulator</dt><dd>Every run uses a noise free simulator. Real hardware noise would lower the share of valid samples.</dd></div>
+        <div><dt>The best day is rare</dt><dd id="rare-text">The exact best appears in 1 to 7 percent of samples. We find it by keeping the best valid sample out of 4,096.</dd></div>
+        <div><dt>Not a pure QUBO</dt><dd>Two fines tie three decisions together, which adds two higher order terms.</dd></div>
+        <div><dt>Growth</dt><dd>The fine list stays short because each slot has few services. A crowded slot would make it grow quickly.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="closing">
+    <h2>Watch eleven qubits plan the day.</h2>
+    <p class="muted">The control room runs QAOA live and shows every optimiser step.</p>
+    <a class="btn" href="/app">Open control room <span class="arrow" aria-hidden="true">→</span></a>
+  </section>
+</main>
+
+<footer class="footer">
+  <span class="brand">Suhai</span>
+  <span class="muted small">Power what matters. When it matters. Built for Qiskit Fall Fest 2026. All values are synthetic and every run is simulated on Qiskit Aer.</span>
+  <span class="foot-links"><a href="/app">Control room</a><a href="/docs">API</a></span>
+</footer>
+
+<script type="module" src="/assets/js/landing.js"></script>
+</body>
+</html>

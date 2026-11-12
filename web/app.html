@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suhai · Control room</title>
+  <meta name="description" content="Run QAOA live on the Suhai village scheduling problem and check every sample against the rules.">
+  <link rel="icon" href="/assets/img/mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/charts.css">
+  <link rel="stylesheet" href="/assets/css/scene.css">
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="/">Suhai <span class="muted">Control room</span></a>
+  <nav class="top-links" aria-label="Sections">
+    <a href="#run">Run</a><a href="#samples">Samples</a><a href="#lab">Rule lab</a><a href="#evidence">Evidence</a>
+  </nav>
+  <span class="engine" id="engine"><span class="dot-live wait"></span><span id="engine-text">Connecting to Qiskit</span></span>
+  <button class="btn" id="run-top">Run QAOA <span class="arrow" aria-hidden="true">→</span></button>
+</header>
+
+<main class="board">
+  <section class="hero-panel" id="overview">
+    <div class="hp-scene" id="hp-scene"></div>
+    <div class="hp-copy">
+      <h1>Power what matters.<br>When it matters.</h1>
+      <p id="hp-sub">40 kWh of sun and 5 kWh of battery for four services.</p>
+    </div>
+    <div class="hp-scrub">
+      <div class="seg" id="slot-seg" role="group" aria-label="Time of day">
+        <button data-value="0" aria-pressed="false">Morning</button>
+        <button data-value="1" aria-pressed="true">Midday</button>
+        <button data-value="2" aria-pressed="false">Afternoon</button>
+        <button data-value="3" aria-pressed="false">Evening</button>
+      </div>
+      <p class="hp-caption" id="hp-caption" aria-live="polite">Irrigation running</p>
+    </div>
+    <div class="hp-stats">
+      <div><span class="num" id="hp-benefit">25</span><span>benefit, <em id="hp-benefit-src">exact best</em></span></div>
+      <div><span class="num" id="hp-gap">0</span><span id="hp-gap-l">gap to exact best</span></div>
+    </div>
+  </section>
+
+  <section class="metrics" aria-label="Key numbers">
+    <div class="kpi"><span class="k-l">Samples that keep every rule <span class="tag" data-src>Recorded</span></span><span class="k-v num" id="k-valid">24.5%</span><span class="k-s" id="k-valid-s">Random guessing gets 2.5%</span></div>
+    <div class="kpi"><span class="k-l">Samples that are the best day <span class="tag" data-src>Recorded</span></span><span class="k-v num"><span id="k-hits">45</span><small> / <span id="k-shots">4,096</span></small></span><span class="k-s" id="k-hits-s">1.10% of samples, one layer</span></div>
+    <div class="kpi"><span class="k-l">Qubits</span><span class="k-v num" id="k-qubits">11</span><span class="k-s"><span id="k-qubits-l">and zero helper qubits</span>. <span id="k-qubits-s">The standard method needs <b id="k-qubits-std">20</b></span></span></div>
+    <div class="kpi"><span class="k-l">Two qubit gates per layer</span><span class="k-v num" id="k-gates">46</span><span class="k-s" id="k-gates-s">Standard method <b id="k-gates-std">106</b></span></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel run-panel" id="run">
+      <header class="ph">
+        <h2>Quantum run</h2>
+        <span class="ph-right"><span class="tag" id="run-tag">Idle</span><span class="mono timer" id="run-timer">0.0 s</span></span>
+      </header>
+      <div class="controls">
+        <div class="ctl"><span>Encoding</span><div class="seg" id="enc-seg"><button data-value="compact" aria-pressed="true">Suhai, 11</button><button data-value="slack" aria-pressed="false">Standard, 20</button></div></div>
+        <div class="ctl"><span>Layers</span><div class="seg" id="layers-seg"><button data-value="1" aria-pressed="true">1</button><button data-value="2" aria-pressed="false">2</button><button data-value="3" aria-pressed="false">3</button></div></div>
+        <div class="ctl"><span>Fine</span><div class="seg" id="penalty-seg"><button data-value="12" aria-pressed="true">12</button><button data-value="20" aria-pressed="false">20</button><button data-value="40" aria-pressed="false">40</button></div></div>
+        <div class="ctl"><span>Battery</span><div class="seg" id="battery-seg"><button data-value="1" aria-pressed="true">5 kWh</button><button data-value="2" aria-pressed="false">10 kWh</button></div></div>
+      </div>
+      <div class="run-row">
+        <button class="btn" id="run-btn"><span class="run-label">Run QAOA</span><span class="arrow" aria-hidden="true">→</span></button>
+        <button class="btn light sm" id="cancel-btn" hidden>Stop</button>
+        <span class="muted small" id="estimate">Measuring this machine</span>
+      </div>
+      <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+      <p class="status small" id="run-status-text">QAOA on the Aer statevector simulator. Press Run or the R key.</p>
+      <div class="trace-head small"><b>Circuit cost</b><span class="muted">lower is better, scaled</span><span class="legend"><span><i class="lg line" style="border-top:1.5px solid rgba(17,19,17,.3)"></i>Each try</span><span><i class="lg" style="background:var(--green)"></i>Best so far</span></span></div>
+      <div class="trace" id="trace"></div>
+      <div class="layer-chips" id="layer-chips"></div>
+    </section>
+
+    <section class="panel plan-panel" id="plan">
+      <header class="ph"><h2>The plan</h2></header>
+      <p class="muted small" id="plan-note">The exact best, found by checking all 2,048 days.</p>
+      <div class="seg wide" id="source-seg">
+        <button data-value="qaoa" aria-pressed="false" disabled>QAOA best</button>
+        <button data-value="exact" aria-pressed="true">Exact best</button>
+        <button data-value="fcfs" aria-pressed="false">First come</button>
+        <button data-value="sample" aria-pressed="false" disabled>Picked</button>
+      </div>
+      <div class="slots" id="plan-slots"></div>
+      <dl class="plan-foot">
+        <div><dt>Benefit</dt><dd class="num" id="pf-benefit">25</dd></div>
+        <div><dt>Battery used</dt><dd class="num" id="pf-battery">1</dd></div>
+        <div class="grow"><dt>Waiting</dt><dd id="pf-unserved">Household essentials</dd></div>
+        <span class="tag good" id="pf-verdict">Keeps every rule</span>
+      </dl>
+      <p class="muted small">The clinic vaccine fridge is powered before planning and never competes.</p>
+    </section>
+
+    <section class="panel samples-panel" id="samples">
+      <header class="ph"><h2>What the circuit returned</h2><span class="tag" id="samples-tag">No run yet</span></header>
+      <p class="muted small" id="samples-note">The most frequent schedules from the last run. Click one to inspect it.</p>
+      <div class="hist-head small" id="hist-head"></div>
+      <div class="hist" id="hist"></div>
+      <ol class="sample-list" id="sample-list"><li class="empty-row">Run QAOA and the top schedules appear here, each checked against the rules.</li></ol>
+    </section>
+
+    <section class="panel land-panel">
+      <header class="ph"><h2>Where the samples landed</h2></header>
+      <p class="muted small" id="land-note">All 2,048 possible days. Green squares keep every rule. The gold one is the best.</p>
+      <div class="land-box"><canvas id="land"></canvas></div>
+      <div class="legend" id="land-legend"></div>
+    </section>
+
+    <section class="panel lab-panel" id="lab">
+      <header class="ph">
+        <div><h2>Rule lab</h2><p class="muted small">Build a day by hand. The server scores it the same way the quantum cost does.</p></div>
+        <span class="ph-right"><button class="btn light sm" id="lab-best">Load the best</button><button class="btn light sm" id="lab-random">Random day</button><button class="btn light sm" id="lab-clear">Clear</button></span>
+      </header>
+      <div class="lab">
+        <div class="switches" id="switches"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+      <div class="lab-fines">
+        <div class="lf-head small"><b>The 16 fines</b><span class="muted" id="lf-note"></span></div>
+        <div class="fine-grid" id="fine-grid"></div>
+      </div>
+    </section>
+
+    <section class="panel ev-panel" id="evidence">
+      <header class="ph">
+        <div><h2>Evidence from the recorded full run</h2><p class="muted small">Reproduced with <code class="mono">python run_all.py</code>. These are the numbers in the report.</p></div>
+      </header>
+      <div class="ev-grid">
+        <figure><figcaption class="small"><b>Valid share by depth</b><span class="muted">Suhai encoding</span></figcaption><div id="ev-depth"></div></figure>
+        <figure><figcaption class="small"><b>Bigger fines are a trade off</b><span class="muted">Three layers. More valid days, fewer best days.</span></figcaption><div id="ev-penalty"></div></figure>
+        <figure><figcaption class="small"><b>First come first served</b><span class="muted">All 24 arrival orders</span></figcaption><div id="ev-fcfs"></div></figure>
+      </div>
+    </section>
+  </div>
+
+  <footer class="board-foot muted small">
+    Suhai · Power what matters. When it matters. · Synthetic data · No quantum speedup claimed. Checking all 2,048 days takes <span id="foot-ms">under a second</span>.
+    Keys: R run, Esc stop, 1 to 4 time of day, B battery, E encoding.
+  </footer>
+</main>
+
+<script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>

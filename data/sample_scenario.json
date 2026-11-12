@@ -1,0 +1,13 @@
+{
+  "note": "Illustrative synthetic values. Energy is counted in blocks of 5 kWh.",
+  "slot_names": ["Morning", "Midday", "Afternoon", "Evening"],
+  "solar_blocks": [2, 4, 2, 0],
+  "battery_blocks": 1,
+  "battery_cost": 0.25,
+  "services": [
+    {"name": "Milk chilling", "key": "m", "energy": 3, "benefits": {"0": 10, "1": 8}},
+    {"name": "Irrigation", "key": "i", "energy": 3, "benefits": {"1": 7, "2": 4}},
+    {"name": "Water purification", "key": "w", "energy": 2, "benefits": {"1": 6, "2": 8}},
+    {"name": "Household essentials", "key": "h", "energy": 1, "benefits": {"3": 3}}
+  ]
+}
